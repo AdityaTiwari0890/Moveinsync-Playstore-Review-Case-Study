@@ -391,3 +391,69 @@ def _complaints(db_path: str, filters: Dict[str, Any]) -> None:
         st.info("No theme-classified negative reviews match the current filters.")
         return
     negative_total = int((data["rating"] <= 2).sum()) if not data.empty else 0
+    themes["share_of_negative_reviews_percent"] = themes["review_count"] / negative_total * 100 if negative_total else 0
+    st.caption("Theme labels can be multi-label: theme counts and shares can overlap and therefore need not sum to 100%.")
+    st.dataframe(themes, use_container_width=True, hide_index=True)
+    st.plotly_chart(px.bar(themes.head(15), x="review_count", y="theme", orientation="h", title="Negative-review theme mentions"), use_container_width=True)
+    platform_mentions = []
+    for _, row in data[data["rating"] <= 2].iterrows():
+        for theme in _theme_list(row.get("assigned_themes")):
+            platform_mentions.append({"theme": theme, "platform": row.get("platform"), "review_id": row.get("review_id")})
+    if platform_mentions:
+        matrix = (
+            pd.DataFrame(platform_mentions)
+            .groupby(["theme", "platform"])
+            .size()
+            .rename("negative_review_mentions")
+            .reset_index()
+            .pivot(index="theme", columns="platform", values="negative_review_mentions")
+            .fillna(0)
+        )
+        st.subheader("Theme mentions by platform")
+        st.dataframe(matrix, use_container_width=True)
+    for theme in themes["theme"].head(8):
+        with st.expander(f"{theme} — supporting negative reviews"):
+            evidence = []
+            for _, row in data[data["rating"] <= 2].iterrows():
+                if theme in _theme_list(row.get("assigned_themes")):
+                    evidence.append(row)
+            for row in evidence[:5]:
+                st.markdown(f"**{row.get('review_id')}** · {row.get('platform')} · {row.get('review_date')} · {row.get('rating')}★")
+                st.write(row.get("review_text") or "")
+
+
+def _alerts(db_path: str) -> None:
+    st.title("Alerts")
+    rows = _rows(db_path, "SELECT * FROM alerts ORDER BY detected_at DESC LIMIT 500")
+    if not rows:
+        st.info("No alert records have been generated.")
+        return
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    unresolved = [row for row in rows if not row.get("resolved")]
+    if unresolved:
+        alert_ids = [row["id"] for row in unresolved]
+        selected = st.selectbox("Select alert", alert_ids, format_func=lambda item: f"Alert {item}: next action")
+        left, right = st.columns(2)
+        if left.button("Acknowledge selected alert"):
+            acknowledge_alert(int(selected), db_path)
+            st.rerun()
+        if right.button("Resolve selected alert"):
+            resolve_alert(int(selected), db_path)
+            st.rerun()
+
+
+def _actions(db_path: str) -> None:
+    st.title("Step 3 Action Plan")
+    if st.button("Import / refresh Step 3 actions from original files"):
+        from ratings_watch.action_tracking import import_step3_actions
+
+        count = import_step3_actions(STEP3_MD, STEP3_ACTION_PLAN, db_path)
+        st.success(f"Imported {count} new actions. Existing tracked statuses were preserved.")
+    actions = _rows(db_path, "SELECT * FROM action_items ORDER BY priority, id")
+    if not actions:
+        st.warning("No Step 3 actions are available. Confirm the Step 3 recommendation files exist and import them.")
+        return
+    st.dataframe(pd.DataFrame(actions), use_container_width=True, hide_index=True)
+    selected_id = st.selectbox("Action item", [row["id"] for row in actions])
+    selected = next(row for row in actions if row["id"] == selected_id)
+    with st.expander("Imported recommendation evidence and metadata"):
