@@ -1049,3 +1049,153 @@ def generate_action_plan_xlsx(
 # ===========================================================================
 
 def generate_recommendations_md(
+    metrics: Dict[str, Any],
+    priority_df: pd.DataFrame,
+    impact_effort_df: pd.DataFrame,
+    strategy_df: pd.DataFrame,
+    platform_data: Dict[str, Any],
+    regression_df: pd.DataFrame,
+    workbook_name: str,
+    output_path: str,
+) -> str:
+    """Generate the full 8-section Markdown recommendation report."""
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    total = metrics.get("total_reviews", "N/A")
+    avg_r = metrics.get("avg_rating", "N/A")
+    neg_rate = metrics.get("neg_rate", "N/A")
+    ci_l = metrics.get("ci_lower", "N/A")
+    ci_u = metrics.get("ci_upper", "N/A")
+    neg_count = int(total * neg_rate / 100) if isinstance(total, int) and isinstance(neg_rate, (int, float)) else "N/A"
+
+    # Top 3 P1 themes
+    p1_rows = priority_df[priority_df["Priority"].str.startswith("P1")] if not priority_df.empty else pd.DataFrame()
+    top3 = p1_rows.head(3)
+
+    # Quick wins
+    qw = impact_effort_df[impact_effort_df["Quadrant"] == "Quick Win"] if not impact_effort_df.empty else pd.DataFrame()
+
+    lines = []
+    lines.append(f"# MOVEIN SYNC — Rating Improvement Recommendation Report (Step 3)")
+    lines.append(f"")
+    lines.append(f"**Generated on:** {ts}  ")
+    lines.append(f"**Data Source:** `{workbook_name}`  ")
+    lines.append(f"**Total Reviews Analyzed:** {total:,}  " if isinstance(total, int) else f"**Total Reviews Analyzed:** {total}  ")
+    lines.append(f"**Negative Reviews (1★ + 2★):** {neg_count:,} ({neg_rate}%)  " if isinstance(neg_count, int) else f"**Negative Reviews (1★ + 2★):** {neg_count} ({neg_rate}%)  ")
+    lines.append(f"**Sample Average Rating:** {avg_r}★ (Wilson 95% CI: [{ci_l}%, {ci_u}%])  ")
+    lines.append("")
+    lines.append("> [!IMPORTANT]")
+    lines.append("> All statistics in this report are derived at runtime from the analyzed workbook.")
+    lines.append("> No figures are hardcoded. Priority assignments are **provisional** until validated")
+    lines.append("> by product, engineering, and operations teams.")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 1: Executive Summary ----------
+    lines.append("## 1. Executive Summary — First Three Actions")
+    lines.append("")
+    lines.append(f"Based on {total:,} reviews with a {neg_rate}% negative review rate, " if isinstance(total, int) else f"Based on {total} reviews with a {neg_rate}% negative rate, ")
+    lines.append("the analysis recommends addressing **technical defects before investing in review acquisition**.")
+    lines.append("The three highest-priority actions are:")
+    lines.append("")
+    if not top3.empty:
+        for i, (_, r) in enumerate(top3.iterrows(), 1):
+            lines.append(f"### Action {i}: {r['Theme']}")
+            lines.append(f"- **Category:** {r['Category']}")
+            lines.append(f"- **Evidence:** {r['Negative Reviews Count']:,} negative reviews mentioning this theme ({r['Share of Negative Reviews %']}% share; Wilson 95% CI: {r['Wilson 95% CI']})")
+            lines.append(f"- **Owner:** {r['Owner Team']}")
+            lines.append(f"- **Effort:** {r['Effort Estimate']}")
+            lines.append(f"- **Success Metric:** {r['Suggested Success Metric']}")
+            lines.append(f"- **Sample Evidence:** {r['Sample Evidence']}")
+            lines.append(f"- **Priority Rationale:** {r['Provisional Status']}")
+            lines.append("")
+    else:
+        lines.append("*No P1 themes identified — check the Pareto_Analysis sheet for data completeness.*")
+        lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 2: Priority Matrix ----------
+    lines.append("## 2. Evidence-Backed Priority Matrix")
+    lines.append("")
+    lines.append("> [!NOTE]")
+    lines.append("> Priority scores combine: negative-review frequency, platform breadth, user-impact severity,")
+    lines.append("> classification confidence, and inverse effort. All assignments are provisional.")
+    lines.append("")
+    if not priority_df.empty:
+        display_cols = ["Priority", "Theme", "Category", "Negative Reviews Count",
+                        "Share of Negative Reviews %", "Wilson 95% CI", "Owner Team", "Effort Estimate"]
+        display_cols = [c for c in display_cols if c in priority_df.columns]
+        header = " | ".join(display_cols)
+        sep = " | ".join(["---"] * len(display_cols))
+        lines.append(f"| {header} |")
+        lines.append(f"| {sep} |")
+        for _, r in priority_df.iterrows():
+            vals = [str(r.get(c, "")) for c in display_cols]
+            lines.append(f"| {' | '.join(vals)} |")
+    else:
+        lines.append("*Priority matrix could not be generated — Pareto_Analysis sheet may be empty.*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 3: Technical vs Operational ----------
+    lines.append("## 3. Technical Defects vs. Operational Failures")
+    lines.append("")
+    lines.append("Issues are separated into three categories. Uncertain causes are flagged for investigation rather than asserted from review text alone.")
+    lines.append("")
+
+    categories = {
+        "Technical Defect": [],
+        "Operational Failure": [],
+        "Shared (Technical + Operational)": [],
+        "Unclear — Requires Investigation": [],
+    }
+    if not priority_df.empty:
+        for _, r in priority_df.iterrows():
+            cat = r.get("Category", "Unclear — Requires Investigation")
+            if cat in categories:
+                categories[cat].append(r["Theme"])
+            else:
+                categories["Unclear — Requires Investigation"].append(r["Theme"])
+
+    for cat, themes in categories.items():
+        if themes:
+            lines.append(f"### {cat}")
+            for t in themes:
+                meta = THEME_META.get(t, {})
+                lines.append(f"- **{t}** — Owner: {meta.get('owner_team', 'TBD')} | {meta.get('effort_estimate', '')}")
+            lines.append("")
+
+    lines.append("> [!CAUTION]")
+    lines.append("> Review text classification is heuristic-based. A theme assigned to 'Technical Defect'")
+    lines.append("> may have an operational root cause (e.g., GPS inaccuracy at a depot due to signal interference,")
+    lines.append("> not an app bug). Validate with internal telemetry before committing engineering resources.")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 4: Platform & Release ----------
+    lines.append("## 4. Platform and Release Comparison")
+    lines.append("")
+    pd_data = platform_data
+    android_n = pd_data.get("android_n", 0)
+    ios_n = pd_data.get("ios_n", 0)
+    android_r = pd_data.get("android_rating", "N/A")
+    ios_r = pd_data.get("ios_rating", "N/A")
+    android_neg = pd_data.get("android_neg", "N/A")
+    ios_neg = pd_data.get("ios_neg", "N/A")
+    min_s = pd_data.get("min_sample", 30)
+    a_ok = pd_data.get("android_sufficient", False)
+    i_ok = pd_data.get("ios_sufficient", False)
+    rating_gap = pd_data.get("rating_gap")
+    neg_gap = pd_data.get("neg_gap")
+
+    lines.append("### Android vs. iOS — Measured Comparison")
+    lines.append("")
+    lines.append("| Metric | Android | iOS | Sample Sufficient? |")
+    lines.append("|--------|---------|-----|-------------------|")
+    lines.append(f"| Sample Size (N) | {android_n:,} | {ios_n:,} | Android: {'✓' if a_ok else f'✗ (< {min_s})'} / iOS: {'✓' if i_ok else f'✗ (< {min_s})'} |")
+    lines.append(f"| Sample Avg Rating | {android_r}★ | {ios_r}★ | See sample size above |")
+    lines.append(f"| Negative Review Rate | {android_neg}% | {ios_neg}% | See sample size above |")
+    lines.append("")
