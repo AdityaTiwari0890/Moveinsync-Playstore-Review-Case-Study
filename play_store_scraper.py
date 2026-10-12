@@ -109,3 +109,25 @@ def scrape_play_store_reviews(
     while len(collected_reviews) < count and not reached_date_boundary:
         current_request_count = min(batch_size, count - len(collected_reviews))
         try:
+            batch_result, next_token = reviews(
+                package_id,
+                lang=lang,
+                country=country,
+                sort=Sort.NEWEST,
+                count=current_request_count,
+                continuation_token=continuation_token,
+            )
+            retry_count = 0  # reset retries on success
+        except Exception as exc:
+            retry_count += 1
+            if retry_count <= max_retries:
+                wait_time = 2 ** retry_count
+                log("WARNING", f"Transient error fetching Play Store reviews ({exc}). Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+                continue
+            else:
+                log("ERROR", f"Failed fetching Play Store reviews after {max_retries} retries: {exc}")
+                break
+
+        if not batch_result:
+            log("INFO", f"No further reviews returned by Google Play for '{package_id}'.")
