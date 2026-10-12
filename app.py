@@ -588,3 +588,69 @@ def _knowledge_base(db_path: str, vector_path: str) -> None:
     with right:
         if st.button("Rebuild Knowledge Base"):
             with st.spinner("Building a replacement index; the previous index remains until embeddings succeed..."):
+                try:
+                    result = index_knowledge_base(
+                        rebuild=True,
+                        workbook_path=EXISTING_WORKBOOK,
+                        step3_md_path=STEP3_MD,
+                        action_plan_path=STEP3_ACTION_PLAN,
+                        db_path=db_path,
+                        vector_path=vector_path,
+                    )
+                    st.success(f"Rebuilt index with {result['updated']} documents.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+
+
+def _collection_status(db_path: str, vector_path: str) -> None:
+    st.title("Data Collection Status")
+    reviews = _rows(db_path, "SELECT platform, COUNT(*) AS total, SUM(is_imported) AS imported FROM reviews GROUP BY platform")
+    runs = _rows(db_path, "SELECT * FROM collection_runs ORDER BY started_at DESC LIMIT 50")
+    registry = _rows(db_path, "SELECT platform, store_id, app_name, app_role, first_seen_at, last_seen_at FROM app_registry ORDER BY platform, app_name, app_role, store_id")
+    st.subheader("Review coverage")
+    st.dataframe(pd.DataFrame(reviews), use_container_width=True, hide_index=True) if reviews else st.info("No review records are stored.")
+    st.subheader("Collection history")
+    st.dataframe(pd.DataFrame(runs), use_container_width=True, hide_index=True) if runs else st.info("No collection attempts recorded.")
+    st.subheader("Registered app and platform targets")
+    st.dataframe(pd.DataFrame(registry), use_container_width=True, hide_index=True) if registry else st.info("No app targets registered. Targets are registered by historical import or review collection.")
+    st.subheader("Configured source adapters")
+    st.write(
+        {
+            "Android": "The project's paginated Google Play collector and public metadata lookup are integrated; live success is shown only by recorded runs.",
+            "iOS": "The project's Apple customer-review RSS collector and iTunes metadata lookup are integrated; live success is shown only by recorded runs. RSS source has a documented per-country limit.",
+            "Knowledge base": get_index_status(vector_path),
+        }
+    )
+    st.subheader("Import existing workbook")
+    workbook = st.text_input("Workbook path", value=EXISTING_WORKBOOK)
+    if st.button("Import workbook reviews"):
+        try:
+            result = import_existing_workbook(workbook, db_path)
+            st.success(f"Import finished: {json.dumps(result, ensure_ascii=False)}")
+        except Exception as exc:
+            st.error(f"Workbook import failed: {exc}")
+    st.subheader("Manual store collection")
+    st.caption("Collection uses the existing Step 1 adapters. Official rating snapshots are saved only when the independent public metadata lookup returns a verified rating.")
+    selected_platform = st.selectbox("Collection platform", ["Android", "iOS"])
+    available_targets = [
+        row for row in registry if row.get("platform", "").lower() == selected_platform.lower()
+    ]
+    if available_targets:
+        target_labels = [
+            f"{row.get('app_name') or 'App'} · {row.get('app_role') or 'role unknown'} · {row['store_id']}"
+            for row in available_targets
+        ]
+        selected_index = st.selectbox("App target", range(len(available_targets)), format_func=lambda i: target_labels[i])
+        selected_target = available_targets[selected_index]
+        collection_app_id = selected_target["store_id"]
+        collection_app_name = selected_target.get("app_name") or load_settings().current_app_name
+        collection_app_role = selected_target.get("app_role") or "employee"
+    else:
+        settings = load_settings()
+        collection_app_id = settings.default_android_package if selected_platform == "Android" else settings.default_ios_store_id
+        collection_app_name = settings.current_app_name
+        collection_app_role = "employee"
+        st.info("No imported target exists for this platform; using the configured default identifier.")
+    count = st.number_input("Maximum reviews to request", min_value=1, max_value=1000, value=200)
+    if st.button(f"Collect {selected_platform} reviews"):
