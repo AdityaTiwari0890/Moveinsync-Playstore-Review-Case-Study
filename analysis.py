@@ -263,3 +263,41 @@ def calculate_segment_comparisons(reviews: List[Dict[str, Any]]) -> Dict[str, An
         "platform_comparison": {
             "android": _quick_stats(android_revs),
             "ios": _quick_stats(ios_revs),
+        },
+        "moveinsync_vs_competitors": {
+            "moveinsync": _quick_stats([r for r in reviews if r.get("app_role") in ("employee", "driver")]),
+            "competitors": _quick_stats(competitor_revs),
+        },
+    }
+
+
+def extract_issue_themes(reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Extract frequency of recurring complaint themes and positive themes from reviews.
+    Uses rule-based regex keyword matching for transparent, auditable classification.
+    """
+    total_reviews = len(reviews)
+    if total_reviews == 0:
+        return []
+
+    theme_matches: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+
+    for r in reviews:
+        text = f"{r.get('review_title') or ''} {r.get('review_text') or ''}".lower()
+        rating = int(r.get("rating") or 0)
+
+        for theme in THEME_DEFINITIONS:
+            # Check rating constraints
+            if "max_rating" in theme and rating > theme["max_rating"]:
+                continue
+            if "min_rating" in theme and rating < theme["min_rating"]:
+                continue
+
+            matched = False
+            for pat in theme["keywords"]:
+                if re.search(pat, text, re.IGNORECASE):
+                    matched = True
+                    break
+
+            if matched:
+                theme_matches[theme["name"]].append(r)

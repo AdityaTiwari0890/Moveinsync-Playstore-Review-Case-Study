@@ -110,3 +110,19 @@ def get_top_themes(db_path: str, platform: str = "all", limit: int = 5) -> List[
             themes = __import__('json').loads(row[0])
         except Exception:
             themes = []
+        if isinstance(themes, list):
+            for theme in themes:
+                counts[theme] += 1
+    return [{"theme": theme, "count": count} for theme, count in counts.most_common(limit)]
+
+
+def get_theme_evidence(db_path: str, theme_name: str, limit: int = 5) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT review_id, platform, rating, review_text, review_date FROM reviews WHERE assigned_themes LIKE ? LIMIT ?",
+        (f"%{theme_name}%", limit),
+    ).fetchall()
+    return [
+        {"review_id": row[0], "platform": row[1], "rating": row[2], "review_text": row[3], "review_date": row[4]}
+        for row in rows
+    ]

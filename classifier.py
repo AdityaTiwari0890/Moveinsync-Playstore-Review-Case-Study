@@ -230,3 +230,42 @@ class ReviewClassifier:
 
 
 def evaluate_classifier(
+    ground_truth_labels: List[List[str]],
+    predicted_labels: List[List[str]],
+    taxonomy_names: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Calculate per-theme and macro-averaged Precision, Recall, and F1 Score
+    given a list of true labels and predicted labels for a validation sample.
+    """
+    if len(ground_truth_labels) != len(predicted_labels):
+        raise ValueError("Length of ground truth and predicted labels must match.")
+
+    if not taxonomy_names:
+        taxonomy_names = [t["theme"] for t in TAXONOMY_CONFIG] + ["Unclassified"]
+
+    stats: Dict[str, Dict[str, int]] = {
+        name: {"tp": 0, "fp": 0, "fn": 0, "tn": 0} for name in taxonomy_names
+    }
+
+    n_samples = len(ground_truth_labels)
+
+    for true_set, pred_set in zip(ground_truth_labels, predicted_labels):
+        true_themes = set(true_set)
+        pred_themes = set(pred_set)
+
+        for name in taxonomy_names:
+            in_true = name in true_themes
+            in_pred = name in pred_themes
+
+            if in_true and in_pred:
+                stats[name]["tp"] += 1
+            elif not in_true and in_pred:
+                stats[name]["fp"] += 1
+            elif in_true and not in_pred:
+                stats[name]["fn"] += 1
+            else:
+                stats[name]["tn"] += 1
+
+    per_theme_results: Dict[str, Dict[str, Any]] = {}
+    precisions = []

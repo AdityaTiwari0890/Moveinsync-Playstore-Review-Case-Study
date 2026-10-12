@@ -113,3 +113,60 @@ class TestAnalysisEngine(unittest.TestCase):
             {"review_text": "Delay in pickup and driver rude", "rating": 1, "app_role": "employee", "platform": "Android"},
             {"review_text": "Otp not received and late cab", "rating": 2, "app_role": "employee", "platform": "iOS"},
             {"review_text": "App crash continuously", "rating": 1, "app_role": "driver", "platform": "Android"},
+            {"review_text": "Worst app", "rating": 1, "app_role": "employee", "platform": "iOS"},
+            {"review_text": "Great smooth ride", "rating": 5, "app_role": "employee", "platform": "iOS"},
+        ])
+
+        clf = ReviewClassifier()
+        df_classified, theme_df, pareto_df = compute_theme_and_pareto_analysis(test_df, clf)
+
+        # 5 negative reviews total
+        total_negative = (test_df["rating"].isin([1, 2])).sum()
+        self.assertEqual(total_negative, 5)
+
+        # Check Pareto table
+        self.assertIn("Theme", pareto_df.columns)
+        self.assertIn("Cumulative Share %", pareto_df.columns)
+        self.assertIn("Pareto Classification", pareto_df.columns)
+
+        # Cab delays mentioned in 3 reviews: 3 / 5 = 60.0% share of negative reviews
+        cab_row = pareto_df[pareto_df["Theme"] == "Cab delays and no-shows"].iloc[0]
+        self.assertEqual(cab_row["Negative Reviews Count"], 3)
+        self.assertEqual(cab_row[f"Share of Negative Reviews % (N={total_negative})"], 60.0)
+
+        # Check cumulative shares are strictly non-decreasing and reach 100%
+        cum_shares = pareto_df["Cumulative Share %"].tolist()
+        self.assertEqual(cum_shares, sorted(cum_shares))
+        self.assertEqual(cum_shares[-1], 100.0)
+
+        # Verify Vital Few classification exists
+        vital_count = (pareto_df["Pareto Classification"] == "Vital Few (Pareto 80% Core)").sum()
+        self.assertGreaterEqual(vital_count, 1)
+
+    def test_05_missing_fields_and_deduplication(self):
+        """Verify safe handling of missing ratings, missing dates, missing versions, and duplicates."""
+        mock_file = "test_missing_and_dups.xlsx"
+        df_raw = pd.DataFrame([
+            {"App Name": "MoveInSync", "Platform": "Android", "Rating": 5, "Review ID": "r1", "Review Date": "2026-10-10", "App Version": "1.0", "Review Text": "Good"},
+            {"App Name": "MoveInSync", "Platform": "Android", "Rating": 5, "Review ID": "r1", "Review Date": "2026-10-10", "App Version": "1.0", "Review Text": "Good"},  # Duplicate
+            {"App Name": "MoveInSync", "Platform": "Android", "Rating": "invalid_rating", "Review ID": "r2", "Review Date": "2026-10-10", "Review Text": "Text"},  # Invalid rating
+            {"App Name": "MoveInSync", "Platform": "Android", "Rating": 1, "Review ID": "r3", "Review Date": None, "App Version": None, "Review Text": "Delay"},  # Missing date/version
+        ])
+        with pd.ExcelWriter(mock_file) as writer:
+            df_raw.to_excel(writer, sheet_name="Combined_Reviews", index=False)
+
+        norm_df, audit = load_and_normalize_workbook(mock_file)
+
+        # 4 initial rows -> 1 duplicate dropped, 1 invalid rating dropped -> 2 valid rows remaining
+        self.assertEqual(audit["initial_rows"], 4)
+        self.assertEqual(audit["duplicates_dropped"], 1)
+        self.assertEqual(audit["invalid_ratings_dropped"], 1)
+        self.assertEqual(len(norm_df), 2)
+
+        # Check missing version was cleaned to default
+        r3_row = norm_df[norm_df["review_id"] == "r3"].iloc[0]
+        self.assertEqual(r3_row["app_version_clean"], "Unknown / Not Specified")
+
+        del norm_df
+        import gc; gc.collect()
+        try:
