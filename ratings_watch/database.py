@@ -105,3 +105,57 @@ DDL_STATEMENTS = [
     )
     """,
     # ── Action items (Step 3 tracker) ────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS action_items (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        source            TEXT DEFAULT 'step3_xlsx',
+        priority          TEXT,
+        theme             TEXT,
+        category          TEXT,
+        owner_team        TEXT,
+        effort_estimate   TEXT,
+        success_metric    TEXT,
+        status            TEXT DEFAULT 'Open',
+        status_updated_at TEXT,
+        notes             TEXT,
+        original_row_json TEXT
+    )
+    """,
+    # ── App config ───────────────────────────────────────────────────────────
+    """
+    CREATE TABLE IF NOT EXISTS app_config (
+        key        TEXT PRIMARY KEY,
+        value      TEXT,
+        updated_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS app_registry (
+        platform      TEXT NOT NULL,
+        store_id      TEXT NOT NULL,
+        app_name      TEXT,
+        app_role      TEXT,
+        first_seen_at TEXT NOT NULL,
+        last_seen_at  TEXT NOT NULL,
+        PRIMARY KEY (platform, store_id)
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS schema_metadata (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    )
+    """,
+    # ── Indexes ──────────────────────────────────────────────────────────────
+    "CREATE INDEX IF NOT EXISTS idx_reviews_platform_date   ON reviews(platform, review_date)",
+    "CREATE INDEX IF NOT EXISTS idx_reviews_rating          ON reviews(rating)",
+    "CREATE INDEX IF NOT EXISTS idx_reviews_app_version     ON reviews(app_version)",
+    "CREATE INDEX IF NOT EXISTS idx_reviews_run             ON reviews(collection_run_id)",
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_platform_at   ON rating_snapshots(platform, snapshot_at)",
+    "CREATE INDEX IF NOT EXISTS idx_alerts_type_platform    ON alerts(alert_type, platform)",
+]
+
+
+def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
+    """Return a thread-local SQLite connection (creates if needed)."""
+    db_path = str(resolve_project_path(db_path))

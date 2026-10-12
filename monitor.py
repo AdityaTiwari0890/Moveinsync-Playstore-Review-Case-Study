@@ -55,3 +55,32 @@ def import_existing_workbook(workbook_path: str, db_path: str, dry_run: bool = F
             "source_rows": len(rows),
             "valid_rows": len(normalized),
             "rejected_missing_or_invalid_platform_id_or_rating": rejected,
+            "action": "dry_run",
+        }
+    result = bulk_upsert_reviews(normalized, run_id=None, is_imported=True, db_path=db_path)
+    return {"source_rows": len(rows), "valid_rows": len(normalized), "rejected": rejected, **result}
+
+
+def collect_reviews(
+    platform: str,
+    app_id: str,
+    app_name: str,
+    count: int,
+    db_path: str,
+    app_role: str = "employee",
+) -> Dict[str, Any]:
+    init_db(db_path)
+    service = CollectionService(db_path)
+    return service.collect_platform(platform, app_id, app_name=app_name, count=count, app_role=app_role)
+
+
+def check_alerts(db_path: str) -> List[Dict[str, Any]]:
+    return collect_alerts(db_path)
+
+
+def main() -> None:
+    settings = load_settings()
+    parser = argparse.ArgumentParser(description="MOVEINSYNC Ratings Watch monitoring CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    import_parser = subparsers.add_parser("import-existing", help="Import Step 1/2 workbook into SQLite")
