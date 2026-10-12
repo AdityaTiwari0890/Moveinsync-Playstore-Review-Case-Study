@@ -108,3 +108,58 @@ OLLAMA_MODEL: str = _first_env("OLLAMA_MODEL", default="gemma4:31b")
 OLLAMA_EMBEDDING_MODEL: str = _first_env("OLLAMA_EMBEDDING_MODEL", default="embeddinggemma")
 OLLAMA_API_KEY: str = _first_env("OLLAMA_API_KEY", "API_KEY", default="")
 LLM_ENABLED: bool = bool(OLLAMA_BASE_URL)
+VECTOR_STORE_PATH: str = str(resolve_project_path(
+    _first_env("VECTOR_STORE_PATH", default="ratings_watch_vectors.db")
+))
+
+
+def validate_config() -> list[str]:
+    """
+    Validate configuration at startup.
+    Returns a list of warning/error strings.
+    Non-LLM features work without API_KEY.
+    """
+    issues: list[str] = []
+    if not Path(DB_PATH).parent.exists():
+        issues.append(f"DB parent directory does not exist: {Path(DB_PATH).parent}")
+    if not Path(EXISTING_WORKBOOK).exists():
+        issues.append(f"Existing workbook not found: {EXISTING_WORKBOOK} — run 'python monitor.py import-existing' after providing it.")
+    if not Path(STEP3_ACTION_PLAN).exists():
+        issues.append(f"Step 3 Action Plan not found: {STEP3_ACTION_PLAN}")
+
+    base_url = OLLAMA_BASE_URL.lower()
+    if "localhost" in base_url or "127.0.0.1" in base_url or "0.0.0.0" in base_url:
+        # Local Ollama does not require an API key.
+        if not OLLAMA_MODEL:
+            issues.append("OLLAMA_MODEL is not set; the LLM assistant cannot request a model.")
+    elif OLLAMA_BASE_URL:
+        if is_placeholder_api_key(OLLAMA_API_KEY):
+            issues.append("API_KEY is missing or still a placeholder for the configured hosted Ollama endpoint; AI requests are disabled until a real key is added.")
+        if not OLLAMA_MODEL:
+            issues.append("OLLAMA_MODEL is not set; the LLM assistant cannot request a model.")
+    return issues
+
+
+class RuntimeSettings:
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+def load_settings() -> RuntimeSettings:
+    """Return the active runtime settings object used by the dashboard and CLI."""
+    return RuntimeSettings(
+        db_path=DB_PATH,
+        default_android_package=ANDROID_PACKAGE_ID,
+        default_ios_store_id=IOS_APP_ID,
+        default_platform=DEFAULT_PLATFORM,
+        current_app_name=ANDROID_APP_NAME,
+        rating_drop_threshold=ALERT_RATING_DROP_THRESHOLD,
+        theme_spike_threshold=ALERT_THEME_SPIKE_THRESHOLD,
+        min_sample_size=ALERT_MIN_SAMPLE,
+        ollama_base_url=OLLAMA_BASE_URL,
+        ollama_model=OLLAMA_MODEL,
+        ollama_embedding_model=OLLAMA_EMBEDDING_MODEL,
+        vector_store_path=VECTOR_STORE_PATH,
+        api_key=OLLAMA_API_KEY,
+    )
