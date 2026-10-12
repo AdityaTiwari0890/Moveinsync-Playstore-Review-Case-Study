@@ -27,3 +27,18 @@ def _safe_int(v: Any, default: int = 0) -> int:
 
 def _safe_rating(v: Any) -> Optional[int]:
     try:
+        numeric = float(v)
+    except (TypeError, ValueError):
+        return None
+    if not numeric.is_integer():
+        return None
+    r = int(numeric)
+    return r if 1 <= r <= 5 else None
+
+
+def _parse_date(v: Any) -> Optional[str]:
+    """Normalize various date formats to ISO-8601 string."""
+    if v is None:
+        return None
+    s = str(v).strip()
+    if s in ("", "nan", "None", "NaT"):
