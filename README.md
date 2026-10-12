@@ -321,3 +321,68 @@ Relative values for `DATABASE_PATH`, `VECTOR_STORE_PATH`, `EXISTING_WORKBOOK`, `
 # Import the historical review sample and Step 3 actions first.
 python monitor.py import-existing
 python monitor.py import-step3
+
+# Test chat and embeddings independently; the command never displays the API key.
+python monitor.py ai-check
+
+# Build or incrementally update the semantic index; --rebuild replaces it only after embeddings succeed.
+python monitor.py index-knowledge-base
+python monitor.py index-knowledge-base --rebuild
+python monitor.py status
+```
+
+The dashboard's **Knowledge Base** page offers **Test Ollama Connection**, **Index Knowledge Base**, **Rebuild Knowledge Base**, and **Refresh Knowledge-Base Status** controls. An absent/placeholder hosted key blocks requests and indexing with a clear error. Chat and embedding checks execute their actual API operations when configured. A rebuild embeds the complete replacement before the SQLite transaction replaces the existing index.
+
+The index can be created only when the configured embedding service is reachable. The first real Ollama indexing run may send review/report text to the configured Ollama endpoint. Use a local Ollama endpoint if the corpus must remain entirely on this machine.
+
+### Collection and monitoring commands
+
+The Step 4 adapters reuse the existing paginated Step 1 Google Play collector and Apple's public customer-review RSS collector. The existing public iOS feed has a limit of up to 500 reviews per country. iOS live collection can return fewer records than requested. Each source's success is represented by the recorded collection run; merely configuring an ID is not proof of success. Public listing metadata is queried independently and a published-rating snapshot is saved only when the metadata lookup returns a rating. A sample mean is never saved as a store rating.
+
+```powershell
+# Collect from one known registered target (repeat with another verified app ID/role as needed).
+python monitor.py collect --platform android --app-id "com.moveinsync.ets" --app-name "MoveInSync" --app-role employee --count 200
+python monitor.py collect --platform ios --app-id "962949521" --app-name "MoveInSync" --app-role employee --count 200
+
+# Evaluate and store alerts, inspect status, or run collect -> alert evaluation -> incremental indexing.
+python monitor.py check-alerts
+python monitor.py status
+python monitor.py run-monitor --platform android --app-id "com.moveinsync.ets" --app-name "MoveInSync" --app-role employee --count 200
+```
+
+Alerts compare timestamped snapshots and equivalent seven-day review windows with minimum sample safeguards. Identical active alerts are deduplicated and held through their configured cooldown. Theme and negative-share comparisons use negative review records; multi-label themes can overlap. A resolved alert is not proof that an issue was fixed.
+
+### Windows Task Scheduler (daily monitoring)
+
+The following PowerShell creates a user-level task that runs independently of Streamlit. Review the target ID and time before executing; task creation is intentionally left to the operator.
+
+```powershell
+$project = "C:\Users\aktiw\Downloads\Performance Analyzer"
+$python = Join-Path $project "venv\Scripts\python.exe"
+$arguments = "`"$project\monitor.py`" run-monitor --platform android --app-id `"com.moveinsync.ets`" --app-name `"MoveInSync`" --app-role employee --count 200"
+$action = New-ScheduledTaskAction -Execute $python -Argument $arguments -WorkingDirectory $project
+$trigger = New-ScheduledTaskTrigger -Daily -At 7:00AM
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited
+Register-ScheduledTask -TaskName "MOVEINSYNC Ratings Watch" -Action $action -Trigger $trigger -Principal $principal
+
+# Verify and optionally run once:
+Get-ScheduledTask -TaskName "MOVEINSYNC Ratings Watch"
+Start-ScheduledTask -TaskName "MOVEINSYNC Ratings Watch"
+Get-ScheduledTaskInfo -TaskName "MOVEINSYNC Ratings Watch"
+```
+
+`run-monitor` reports collection, alert, and indexing outcomes separately. A missing Ollama endpoint can make the knowledge-base update partial without stopping review collection or alert evaluation.
+
+### Tests and known limitations
+
+```powershell
+python -m unittest tests.test_step4 tests.test_rag
+python test_analysis_engine.py
+```
+
+- Historical iOS reviews are present in the workbook and both existing Step 1 public collectors are reused. Live store access was not re-run as part of these tests.
+- Official rating snapshots appear only after the store metadata lookup provides a rating; the historic analyzed workbook is not treated as snapshot history.
+- Step 3 is imported from the actual `Priority_Matrix` table, which has title/header rows; source-row fields are retained for evidence and tracking.
+- SQLite cosine ranking is intended for this local-scale corpus. It loads candidate vectors into process memory for ranking and is not a multi-user or large-corpus vector database.
+- Semantic retrieval quality and hosted-model behavior still require the operator's real Ollama model/endpoint. Automated RAG tests use deterministic mocked embeddings/chat and do not claim hosted service connectivity.
+- Current source platform data covers MoveInSync employee and driver variants in the workbook; the registry discovers those real IDs. Additional products are supported by adding/importing their verified identifiers and records.
