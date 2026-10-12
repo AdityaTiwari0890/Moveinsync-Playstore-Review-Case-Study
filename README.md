@@ -62,3 +62,68 @@ App Review Intelligence Scraper & Analysis Engine
 ├── MOVEIN_SYNC_ANALYSIS_REPORT.md # Generated executive analysis report
 ├── requirements.txt            # Pinned dependencies
 ├── .env.example                # Environment variables template
+└── README.md                   # User guide & PowerShell execution commands
+```
+
+---
+
+## Getting Started (Windows PowerShell)
+
+Follow these exact commands in **Windows PowerShell**:
+
+### 1. Create and Activate Virtual Environment
+
+```powershell
+# Navigate to the project root directory
+cd "c:\Users\aktiw\Downloads\Performance Analyzer"
+
+# Create a virtual environment named 'venv'
+python -m venv venv
+
+# Activate the virtual environment
+.\venv\Scripts\Activate.ps1
+```
+
+> *Tip: If PowerShell prevents script execution, run:*
+> `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
+
+### 2. Install Dependencies
+
+```powershell
+pip install -r requirements.txt
+```
+
+### 3. Optional Environment Configuration
+
+If you have a SerpApi key for extended iOS review scraping beyond Apple's 500-review RSS limit:
+
+```powershell
+Copy-Item .env.example .env
+# Open .env and insert your SERPAPI_API_KEY=your_key_here
+```
+
+---
+
+## Execution Guide
+
+### Option A: Interactive Terminal Wizard (Recommended)
+
+Run the script without arguments to enter the interactive setup wizard:
+
+```powershell
+python main.py
+```
+
+The wizard will interactively prompt you for:
+1. Application Name (e.g., `MoveInSync`, `Routematic`, `Uber`).
+2. Role Category (`employee`, `driver`, `competitor`).
+3. Platform (`Both Android & iOS`, `Android only`, `iOS only`).
+4. Store URLs / Package IDs (or auto-search matching store listings).
+5. Number of reviews (default: 500, min: 100, max: 10,000).
+6. Option to queue additional apps (e.g., driver app or competitors) in the same run.
+7. Confirmation to proceed and output workbook path.
+
+---
+
+### Option B: Command-Line (CLI) Mode
+
