@@ -298,3 +298,153 @@ def _extract_overview_metrics(sheets: Dict[str, Any]) -> Dict[str, Any]:
 
 def _parse_pareto_df(sheets: Dict[str, Any]) -> pd.DataFrame:
     """
+    Return a clean Pareto DataFrame with columns:
+      Theme | Negative Reviews Count | Share % | Wilson CI Lower | Wilson CI Upper |
+      Cumulative Share % | Pareto Classification
+
+    The Pareto_Analysis sheet has this structure when read by pandas:
+      - Column 0 header = NOTE text (the note was written in cell A1 of the sheet)
+      - Row 0 of data = actual column names (written in row 2 of the sheet)
+      - Rows 1+ of data = actual data rows
+    We detect this by checking whether the first column header starts with 'NOTE:'
+    OR whether the first data row looks like a header (contains 'Theme').
+    """
+    pa = sheets.get("Pareto_Analysis")
+    if pa is None or pa.empty:
+        return pd.DataFrame()
+
+    # Case 1: note is the column header (pandas read the note cell as header)
+    first_col_name = str(pa.columns[0]).strip()
+    if first_col_name.upper().startswith("NOTE:"):
+        # Row 0 of the dataframe holds the real column names
+        if len(pa) < 1:
+            return pd.DataFrame()
+        new_cols = pa.iloc[0].astype(str).str.strip().tolist()
+        data = pa.iloc[1:].copy()
+        data.columns = new_cols
+        data = data.reset_index(drop=True)
+    else:
+        # Case 2: note was a separate row in the data (first column starts with 'NOTE')
+        first_col = pa.iloc[:, 0].astype(str)
+        note_mask = first_col.str.upper().str.startswith("NOTE:")
+        if note_mask.any():
+            header_row_idx = note_mask.idxmax() + 1
+            if header_row_idx >= len(pa):
+                return pd.DataFrame()
+            new_cols = pa.iloc[header_row_idx].astype(str).str.strip().tolist()
+            data = pa.iloc[header_row_idx + 1:].copy()
+            data.columns = new_cols
+            data = data.reset_index(drop=True)
+        else:
+            # No note detected — use as-is
+            data = pa.copy()
+            data.columns = [str(c).strip() for c in data.columns]
+
+    # Find the 'Theme' column (may be named differently)
+    theme_col = None
+    for c in data.columns:
+        if str(c).strip().lower() == "theme":
+            theme_col = c
+            break
+    if theme_col is None:
+        # Try first non-empty column
+        theme_col = data.columns[0]
+
+    data = data.rename(columns={theme_col: "Theme"})
+    data = data[data["Theme"].astype(str).str.strip() != ""]
+    data = data[data["Theme"].notna()]
+
+    # Standardize remaining column names
+    renamed: Dict[str, str] = {}
+    for col in data.columns:
+        cl = str(col).lower()
+        if "negative reviews count" in cl:
+            renamed[col] = "Negative Reviews Count"
+        elif "share of negative" in cl and "%" in cl:
+            renamed[col] = "Share of Negative Reviews %"
+        elif "wilson" in cl and "lower" in cl:
+            renamed[col] = "Wilson CI Lower"
+        elif "wilson" in cl and "upper" in cl:
+            renamed[col] = "Wilson CI Upper"
+        elif "cumulative share" in cl:
+            renamed[col] = "Cumulative Share %"
+        elif "pareto classification" in cl:
+            renamed[col] = "Pareto Classification"
+    data = data.rename(columns=renamed)
+
+    # Coerce numeric columns
+    for col in ["Negative Reviews Count", "Share of Negative Reviews %", "Wilson CI Lower",
+                "Wilson CI Upper", "Cumulative Share %"]:
+        if col in data.columns:
+            data[col] = pd.to_numeric(data[col], errors="coerce")
+
+    return data.reset_index(drop=True)
+
+
+def _parse_regression_df(sheets: Dict[str, Any]) -> pd.DataFrame:
+    """
+    Extract the regression section from Version_Analysis sheet.
+    Returns empty DataFrame if no regressions or sheet unavailable.
+    """
+    va = sheets.get("Version_Analysis")
+    if va is None or va.empty:
+        return pd.DataFrame()
+
+    # Find the row that flags regressions
+    first_col = va.iloc[:, 0].astype(str)
+    reg_mask = first_col.str.contains("REGRESSION", case=False, na=False)
+    if not reg_mask.any():
+        return pd.DataFrame()
+
+    reg_start = reg_mask.idxmax() + 1  # header of regression table
+    if reg_start >= len(va):
+        return pd.DataFrame()
+
+    header_row = va.iloc[reg_start].astype(str).str.strip().tolist()
+    data = va.iloc[reg_start + 1 :].copy()
+    data.columns = header_row
+    data = data.dropna(how="all").reset_index(drop=True)
+
+    # Drop 'No regression detected' text rows
+    if "App Name" in data.columns:
+        data = data[data["App Name"].notna()]
+        data = data[~data["App Name"].astype(str).str.startswith("No version")]
+
+    return data
+
+
+def _sample_review_excerpts(
+    raw_df: Optional[pd.DataFrame],
+    theme_name: str,
+    n: int = 3,
+) -> List[str]:
+    """
+    Sample up to n negative review excerpts for a given theme.
+    Falls back gracefully if raw_df is unavailable or columns are missing.
+    """
+    if raw_df is None or raw_df.empty:
+        return []
+
+    # Normalize column names
+    col_map = {}
+    for c in raw_df.columns:
+        norm = str(c).strip().lower().replace("_", " ")
+        if norm in ("review text", "content", "text"):
+            col_map[c] = "review_text"
+        elif norm in ("review id", "id"):
+            col_map[c] = "review_id"
+        elif norm in ("rating", "score"):
+            col_map[c] = "rating"
+        elif "theme" in norm or "assigned theme" in norm:
+            col_map[c] = "assigned_themes"
+
+    df = raw_df.rename(columns=col_map).copy()
+
+    # Filter negative reviews
+    if "rating" in df.columns:
+        df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
+        df = df[df["rating"].isin([1, 2])]
+
+    if df.empty:
+        return []
+
