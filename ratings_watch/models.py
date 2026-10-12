@@ -16,3 +16,21 @@ class ReviewRecord:
     review_title: str = ""
     review_date: Optional[str] = None
     app_version: str = "Unknown"
+    review_source: str = "import"
+    collection_timestamp: Optional[str] = None
+    store_id: Optional[str] = None
+    theme: Optional[str] = None
+    theme_confidence: str = "unknown"
+    extra: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RatingSnapshot:
+    snapshot_id: Optional[int] = None
+    platform: str = "unknown"
+    app_identifier: str = ""
+    official_rating: Optional[float] = None
+    source: str = "manual"
+    observed_at: Optional[str] = None
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
