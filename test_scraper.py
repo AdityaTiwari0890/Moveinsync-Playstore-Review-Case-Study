@@ -69,3 +69,27 @@ class TestAppReviewIntelligenceScraper(unittest.TestCase):
 
         # Test scraping with a widely reviewed app (Uber - 368677368) to verify pagination >= 100 reviews
         reviews = scrape_app_store_reviews(
+            app_id="368677368",
+            app_name="Uber",
+            app_role="competitor",
+            count=100,
+            country="us",
+        )
+        self.assertGreaterEqual(len(reviews), 100, f"Expected at least 100 reviews for Uber, got {len(reviews)}")
+
+        # Check sorting: newest to oldest
+        dates = [r["review_date"] for r in reviews if r.get("review_date")]
+        self.assertEqual(dates, sorted(dates, reverse=True), "iOS Reviews should be sorted newest first")
+
+        # Check deduplication
+        review_ids = [r["review_id"] for r in reviews]
+        self.assertEqual(len(review_ids), len(set(review_ids)), "All iOS review IDs must be unique")
+
+    def test_04_metadata_retrieval(self):
+        """Verify store metadata extraction and limitation reporting."""
+        meta_android = get_play_store_metadata("com.moveinsync.ets")
+        self.assertEqual(meta_android["status"], "SUCCESS")
+        self.assertEqual(meta_android["title"], "MoveInSync")
+        self.assertIsNotNone(meta_android["store_rating"])
+        self.assertIn("limitation_note", meta_android)
+

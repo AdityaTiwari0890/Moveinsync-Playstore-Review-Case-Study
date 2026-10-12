@@ -106,3 +106,58 @@ def _parse_itunes_xml_page(xml_bytes: bytes) -> List[Dict[str, Any]]:
             reviews.append({
                 "id": r_id,
                 "rating": int(rating_elem.text) if rating_elem.text.isdigit() else 0,
+                "title": title,
+                "content": content,
+                "user_name": author,
+                "version": version,
+                "updated": updated,
+                "votes": int(votes) if votes.isdigit() else 0,
+            })
+    except Exception:
+        pass
+    return reviews
+
+
+def scrape_app_store_reviews(
+    app_id: str,
+    app_name: str,
+    app_role: str = "employee",
+    count: int = 500,
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    country: str = "in",
+    log_callback: Optional[Callable[[str, str], None]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Collect customer reviews for an iOS app from Apple App Store via official RSS feeds
+    and optional SerpApi integration.
+
+    Args:
+        app_id: Apple App Store numeric ID (e.g. '962949521')
+        app_name: Display name of the application
+        app_role: Application role ('employee', 'driver', 'competitor')
+        count: Target number of reviews (min 100, default 500)
+        start_date: Optional earliest review date to collect
+        end_date: Optional latest review date to collect
+        country: Two-letter country code (default 'in')
+        log_callback: Optional callback func(level, message)
+
+    Returns:
+        List of standardized review dictionaries sorted newest first.
+    """
+    clean_id = str(app_id).strip()
+    if clean_id.lower().startswith("id"):
+        clean_id = clean_id[2:]
+
+    collected_reviews: List[Dict[str, Any]] = []
+    seen_ids = set()
+    collection_ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    source_url = f"https://apps.apple.com/app/id{clean_id}"
+
+    def log(level: str, msg: str):
+        if log_callback:
+            log_callback(level, msg)
+
+    log("INFO", f"Starting Apple App Store scrape for '{app_name}' (ID: {clean_id}), target: {count} reviews.")
+
+    reached_date_boundary = False

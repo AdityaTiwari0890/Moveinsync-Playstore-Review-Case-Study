@@ -131,3 +131,25 @@ def scrape_play_store_reviews(
 
         if not batch_result:
             log("INFO", f"No further reviews returned by Google Play for '{package_id}'.")
+            break
+
+        new_items_in_batch = 0
+        for item in batch_result:
+            review_dt = item.get("at")
+            if isinstance(review_dt, datetime.datetime):
+                review_date_val = review_dt.date()
+                review_dt_str = review_dt.strftime("%Y-%m-%d %H:%M:%S")
+            elif review_dt:
+                review_dt_str = str(review_dt)
+                try:
+                    review_date_val = datetime.date.fromisoformat(review_dt_str[:10])
+                except Exception:
+                    review_date_val = None
+            else:
+                review_dt_str = None
+                review_date_val = None
+
+            # Date Range Filters
+            if review_date_val and end_date and review_date_val > end_date:
+                continue  # Skip reviews newer than end_date
+
