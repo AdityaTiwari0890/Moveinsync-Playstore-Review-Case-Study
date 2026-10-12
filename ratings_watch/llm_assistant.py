@@ -156,3 +156,26 @@ class LLMAssistant:
         chat = (
             {"ok": False, "error": chat_configuration_error}
             if chat_configuration_error
+            else self.ask("Reply with exactly: OK", timeout=30)
+        )
+        if embedding_configuration_error:
+            embedding = {"ok": False, "error": embedding_configuration_error}
+        else:
+            try:
+                vectors = self.embed(["MOVEINSYNC Ratings Watch connectivity test"], timeout=30)
+                embedding = {
+                    "ok": True,
+                    "model": self.embedding_model,
+                    "dimensions": len(vectors[0]),
+                }
+            except Exception as exc:
+                embedding = {"ok": False, "error": str(exc)}
+        return {
+            "provider": "Ollama Cloud" if not self._is_local() else "Local Ollama",
+            "base_url": self.base_url,
+            "chat_model": self.model,
+            "embedding_model": self.embedding_model,
+            "chat": chat,
+            "embedding": embedding,
+            "ready": bool(chat.get("ok") and embedding.get("ok")),
+        }

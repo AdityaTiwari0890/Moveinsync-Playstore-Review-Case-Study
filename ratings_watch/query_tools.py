@@ -78,3 +78,24 @@ class QueryTools:
         return [{"theme": theme, "count": count} for theme, count in sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:limit]]
 
     def compare_platforms(self) -> Dict[str, Any]:
+        conn = self._conn()
+        rows = conn.execute("SELECT platform, COUNT(*), AVG(rating), SUM(CASE WHEN rating <= 2 THEN 1 ELSE 0 END) FROM reviews GROUP BY platform").fetchall()
+        result = {}
+        for platform, total, avg, negative in rows:
+            result[platform] = {"total_reviews": int(total), "average_rating": round(float(avg or 0.0), 2), "negative_count": int(negative), "negative_share_pct": round((int(negative) / int(total)) * 100, 2) if total else 0.0}
+        return result
+
+    def get_theme_evidence(self, theme_name: str, limit: int = 5) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        rows = conn.execute("SELECT review_id, platform, rating, review_text FROM reviews WHERE assigned_themes LIKE ? LIMIT ?", (f"%{theme_name}%", limit)).fetchall()
+        return [{"review_id": row[0], "platform": row[1], "rating": row[2], "review_text": row[3]} for row in rows]
+
+    def get_recent_alerts(self, limit: int = 10) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        rows = conn.execute("SELECT * FROM alerts ORDER BY detected_at DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_priority_recommendations(self) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        rows = conn.execute("SELECT * FROM action_items ORDER BY id LIMIT 10").fetchall()
+        return [dict(row) for row in rows]
