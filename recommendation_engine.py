@@ -1199,3 +1199,153 @@ def generate_recommendations_md(
     lines.append(f"| Sample Avg Rating | {android_r}★ | {ios_r}★ | See sample size above |")
     lines.append(f"| Negative Review Rate | {android_neg}% | {ios_neg}% | See sample size above |")
     lines.append("")
+
+    if rating_gap is not None:
+        if abs(rating_gap) >= 0.5 and a_ok and i_ok:
+            lines.append(f"> [!WARNING]")
+            lines.append(f"> Android sample average rating is {abs(rating_gap):.2f}★ {'higher' if rating_gap > 0 else 'lower'} than iOS ({android_r}★ vs {ios_r}★).")
+            lines.append(f"> This gap warrants platform-specific investigation but should be correlated with")
+            lines.append(f"> internal telemetry before attributing to a specific feature or release.")
+        else:
+            lines.append(f"*Rating gap between platforms is {rating_gap:+.2f}★ — {'within expected variance' if abs(rating_gap) < 0.5 else 'notable but check sample sizes'}.*")
+    lines.append("")
+
+    lines.append("### Version Regression Flags")
+    lines.append("")
+    regressions = pd_data.get("regressions", [])
+    if regressions:
+        lines.append("| App | Platform | Prior Version | Regressed Version | Rating Delta | Neg Rate Jump | Observation |")
+        lines.append("|-----|----------|---------------|-------------------|-------------|--------------|-------------|")
+        for reg in regressions:
+            lines.append(f"| {reg['app']} | {reg['platform']} | {reg['prior_ver']} | {reg['current_ver']} | {reg['rating_delta']} | +{reg['neg_jump']}% | {reg['observation']} |")
+        lines.append("")
+        lines.append("> [!CAUTION]")
+        lines.append("> All version regressions are **observational associations** only — not proof of causation.")
+        lines.append("> A rating drop following a release may coincide with fleet supply shortages, public holidays,")
+        lines.append("> or external operational factors. Validate with crash telemetry and server error logs.")
+        lines.append("> **Evidence required to validate each regression:** internal ANR/crash rates for the flagged")
+        lines.append("> version; fleet availability metrics for the regression period; server error-rate logs.")
+    else:
+        lines.append("*No version regressions exceeded the detection threshold (ΔRating ≤ −0.30★ or ΔNeg Rate ≥ +15%) with sufficient sample size (N ≥ 15 per version).*")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 5: Rating Improvement Strategy ----------
+    lines.append("## 5. Rating Improvement Strategy")
+    lines.append("")
+    lines.append("> [!IMPORTANT]")
+    lines.append("> The following recommendations are policy-compliant. The following approaches are **explicitly")
+    lines.append("> prohibited** and are not included: incentivized reviews, review gating (routing users based on")
+    lines.append("> anticipated star rating), selective suppression of negative feedback, or fabricated ratings.")
+    lines.append("")
+    if not strategy_df.empty:
+        for i, (_, r) in enumerate(strategy_df.iterrows(), 1):
+            lines.append(f"### Strategy {i}: {r['Initiative']}")
+            lines.append(f"- **Type:** {r['Type']}")
+            lines.append(f"- **Description:** {r['Description']}")
+            lines.append(f"- **Owner:** {r['Owner']}")
+            lines.append(f"- **Estimated Timeline:** {r['Estimated Timeline']}")
+            lines.append(f"- **Compliance Note:** {r['Compliance Note']}")
+            lines.append(f"- **Success Metric:** {r['Success Metric']}")
+            lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 6: Impact vs Effort ----------
+    lines.append("## 6. Impact vs. Effort Matrix")
+    lines.append("")
+    lines.append("> [!NOTE]")
+    lines.append("> **Impact** = measured from negative-review share in the workbook (objective data).")
+    lines.append("> **Effort** = qualitative engineering estimate — treat as directional, not a firm commitment.")
+    lines.append("")
+    for quadrant in ["Quick Win", "Major Project", "Fill-In", "Deprioritize"]:
+        q_rows = impact_effort_df[impact_effort_df["Quadrant"] == quadrant] if not impact_effort_df.empty else pd.DataFrame()
+        desc = QUADRANT_DESCRIPTION.get(quadrant, "")
+        lines.append(f"### {quadrant}")
+        lines.append(f"*{desc}*")
+        lines.append("")
+        if not q_rows.empty:
+            for _, r in q_rows.iterrows():
+                lines.append(f"- **{r['Theme']}** ({r['Category']})")
+                lines.append(f"  - Impact: {r['Measured Impact Evidence']}")
+                lines.append(f"  - Effort: {r['Effort Estimate (Qualitative)']}")
+                lines.append(f"  - Action: {r['Recommended Immediate Action']}")
+        else:
+            lines.append("*No themes in this quadrant.*")
+        lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 7: Success Metrics ----------
+    lines.append("## 7. Success Metrics Summary")
+    lines.append("")
+    lines.append("All baselines marked 'TBC' require confirmation from internal telemetry or service logs.")
+    lines.append("Measurement windows are suggested; adjust to release cadence.")
+    lines.append("")
+    if not priority_df.empty:
+        lines.append("| Theme | Priority | Owner | Success Metric |")
+        lines.append("|-------|----------|-------|----------------|")
+        for _, r in priority_df.iterrows():
+            lines.append(f"| {r['Theme']} | {r['Priority']} | {r['Owner Team']} | {r['Suggested Success Metric'][:120]}{'...' if len(r['Suggested Success Metric']) > 120 else ''} |")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    # ---------- Section 8: Evidence & Limitations ----------
+    lines.append("## 8. Evidence and Limitations")
+    lines.append("")
+    lines.append("### Data Provenance")
+    lines.append(f"- **Source Workbook:** `{workbook_name}`")
+    lines.append(f"- **Total Reviews Loaded:** {total:,}" if isinstance(total, int) else f"- **Total Reviews Loaded:** {total}")
+    lines.append(f"- **Analysis Engine:** App Review Analysis Engine Step 2 (analysis_engine.py)")
+    lines.append(f"- **Classifier:** 11-category keyword/regex heuristic (classifier.py)")
+    lines.append(f"- **Report Generated:** {ts}")
+    lines.append("")
+    lines.append("### Classification Limitations")
+    lines.append("1. **Heuristic-only classifier:** All theme assignments are keyword/regex-based. No machine learning model was trained. Classifications are directional indicators, not ground-truth labels.")
+    lines.append("2. **Multi-label overlap:** A single review can be assigned to multiple themes. Percentages across themes sum to more than 100%.")
+    lines.append("3. **Unclassified reviews:** Reviews with insufficient text or no matching patterns are labelled 'Unclassified' and excluded from theme counts.")
+    lines.append("4. **No manual validation set:** Without a human-labelled validation sample, precision/recall/F1 metrics cannot be computed. See `classifier.py → evaluate_classifier()` for the framework when such a dataset becomes available.")
+    lines.append("")
+    lines.append("### Sampling Limitations")
+    lines.append("1. **Self-selection bias:** Store reviews are over-representative of frustrated users. The positive silent majority is not captured.")
+    lines.append("2. **Sample ≠ census:** All statistics are sample estimates from collected reviews, not the complete lifetime rating population of the store.")
+    lines.append("3. **Date range:** Statistics reflect the review collection window only. Seasonal, operational, or market events outside that window are not accounted for.")
+    lines.append("")
+    lines.append("### Observational Constraints")
+    lines.append("- Version regressions are correlational associations, not causal proofs.")
+    lines.append("- A priority ranking from review frequency does not guarantee that fixing the most-mentioned theme will produce the largest rating improvement; user-satisfaction elasticity varies by theme.")
+    lines.append("- Do not commit to a specific store-rating target (e.g., 'we will reach 4.0★') without defensible supporting evidence from internal data and a controlled improvement experiment.")
+    lines.append("")
+    lines.append("---")
+    lines.append("*Report generated automatically by `recommendation_engine.py` (Step 3).*  ")
+    lines.append("*All source data is preserved in the original and analyzed workbooks.*")
+
+    content = "\n".join(lines)
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    return output_path
+
+
+# ===========================================================================
+# MAIN PIPELINE
+# ===========================================================================
+
+DEFAULT_INPUT = "App_Review_Intelligence_MoveInSync_20261012_173118_Analyzed.xlsx"
+DEFAULT_REPORT_MD = "MOVEIN_SYNC_STEP3_RECOMMENDATIONS.md"
+DEFAULT_ACTION_PLAN = "MOVEIN_SYNC_ACTION_PLAN.xlsx"
+
+
+def run_recommendation_pipeline(
+    input_file: str = DEFAULT_INPUT,
+    report_md: str = DEFAULT_REPORT_MD,
+    action_plan: str = DEFAULT_ACTION_PLAN,
+) -> Dict[str, Any]:
+    """Full Step 3 recommendation pipeline."""
+    print("=" * 70)
+    print("   MOVEIN SYNC RATING IMPROVEMENT RECOMMENDATION ENGINE (STEP 3)   ")
+    print("=" * 70)
+    print(f"[*] Input workbook  : {input_file}")
+    print(f"[*] Recommendations : {report_md}")
