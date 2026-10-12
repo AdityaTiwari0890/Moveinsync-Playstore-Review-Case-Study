@@ -51,3 +51,30 @@ class CollectionService:
                     review["heuristic_confidence"] = classification["heuristic_confidence"]
                     review["is_unclassified"] = classification["is_unclassified"]
                 classified.append(review)
+            result = bulk_upsert_reviews(classified, run_id=run_id, is_imported=False, db_path=self.db_path)
+            summary.update(result)
+            summary["failed"] += summary["rejected"]
+            summary["status"] = (
+                "partial"
+                if summary["rejected"] or result.get("failed") or summary["source_errors_observed"] or not summary["fetched"]
+                else "success"
+            )
+            if not summary["fetched"]:
+                summary["source_message"] = "The source adapter returned no reviews; verify the app ID, availability and collection logs."
+
+            try:
+                from metadata import get_app_store_metadata, get_play_store_metadata
+
+                metadata = (
+                    get_play_store_metadata(app_id, country=kwargs.get("country", "in"), lang=kwargs.get("lang", "en"))
+                    if platform_key == "android"
+                    else get_app_store_metadata(app_id, country=kwargs.get("country", "in"))
+                )
+                if metadata.get("status") == "SUCCESS" and metadata.get("store_rating") is not None:
+                    snapshot_id = save_rating_snapshot(
+                        platform="Android" if platform_key == "android" else "iOS",
+                        store_id=app_id,
+                        app_name=app_name,
+                        official_rating=metadata["store_rating"],
+                        rating_source=f"{platform_key}_public_store_metadata",
+                        total_ratings_count=metadata.get("store_ratings_count"),

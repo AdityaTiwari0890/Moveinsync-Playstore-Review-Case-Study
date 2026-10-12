@@ -198,3 +198,32 @@ def main() -> None:
     elif args.command == "status":
         conn = get_connection(args.db)
         try:
+            source_status = inspect_knowledge_sources(
+                EXISTING_WORKBOOK, STEP3_MD, STEP3_ACTION_PLAN, args.db
+            )
+            vector_status = get_index_status(args.vector_store)
+            ready = bool(
+                source_status["workbook_exists"]
+                and source_status["total_chunks_generated"] > 0
+                and vector_status["document_count"] > 0
+                and vector_status["persisted_vector_count"] == vector_status["chunk_count"]
+                and vector_status["invalid_vector_count"] == 0
+                and not vector_status.get("store_error")
+                and not vector_status["last_error"]
+            )
+            ai_status = LLMAssistant().test_connection()
+            status = {
+                "reviews_by_platform": {
+                    row["platform"]: row["count"]
+                    for row in conn.execute("SELECT platform, COUNT(*) AS count FROM reviews GROUP BY platform")
+                },
+                "registered_app_targets": [
+                    dict(row)
+                    for row in conn.execute(
+                        "SELECT platform, store_id, app_name, app_role, first_seen_at, last_seen_at FROM app_registry ORDER BY platform, app_name, app_role, store_id"
+                    )
+                ],
+                "latest_collection_runs": [
+                    dict(row)
+                    for row in conn.execute(
+                        "SELECT platform, status, started_at, completed_at, fetched, inserted, updated, skipped, failed, error_message FROM collection_runs ORDER BY started_at DESC LIMIT 10"

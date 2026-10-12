@@ -373,3 +373,57 @@ def finish_collection_run(run_id: int, status: str, counts: Dict[str, int],
         conn.execute(
             """UPDATE collection_runs SET completed_at=?, status=?,
                fetched=?, inserted=?, updated=?, skipped=?, failed=?,
+               error_message=?, notes=? WHERE id=?""",
+            (now, status,
+             counts.get("fetched", 0), counts.get("inserted", 0),
+             counts.get("updated", 0), counts.get("skipped", 0),
+             counts.get("failed", 0), error, notes, run_id),
+        )
+
+
+# ── Rating snapshots ─────────────────────────────────────────────────────────
+
+def save_rating_snapshot(platform: str, store_id: str, app_name: str,
+                          official_rating: Optional[float], rating_source: str,
+                          total_ratings_count: Optional[int] = None,
+                          run_id: Optional[int] = None,
+                          metadata: Optional[Dict] = None,
+                          db_path: str = DB_PATH) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    meta_json = json.dumps(metadata) if metadata else None
+    with transaction(db_path) as conn:
+        cur = conn.execute(
+            """INSERT INTO rating_snapshots
+               (platform, store_id, app_name, official_rating, rating_source,
+                total_ratings_count, snapshot_at, collection_run_id, metadata_json)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (platform, store_id, app_name, official_rating, rating_source,
+             total_ratings_count, now, run_id, meta_json),
+        )
+        return cur.lastrowid
+
+
+# ── Alert CRUD ───────────────────────────────────────────────────────────────
+
+def upsert_alert(alert: Dict[str, Any], db_path: str = DB_PATH) -> str:
+    """Insert or skip (if in cooldown) an alert. Returns 'inserted' or 'skipped'."""
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        existing = conn.execute(
+            "SELECT id, cooldown_until, resolved FROM alerts WHERE alert_key=?",
+            (alert["alert_key"],),
+        ).fetchone()
+
+        if existing:
+            # Skip if in cooldown and not yet resolved
+            cooldown = existing["cooldown_until"]
+            if not existing["resolved"] and cooldown and cooldown > now:
+                return "skipped"
+            # Re-open if cooldown expired
+            conn.execute(
+                """UPDATE alerts SET detected_at=?, baseline_value=?, current_value=?,
+                   threshold=?, supporting_ids=?, cooldown_until=?,
+                   acknowledged=0, acknowledged_at=NULL, resolved=0, resolved_at=NULL
+                   WHERE alert_key=?""",
+                (now, alert.get("baseline_value"), alert.get("current_value"),
+                 alert.get("threshold"),

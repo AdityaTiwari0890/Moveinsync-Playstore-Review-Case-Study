@@ -141,3 +141,31 @@ def evaluate_one_star_spike(
             if delta > threshold:
                 alerts.append(
                     {
+                        "alert_type": "one_star_spike",
+                        "platform": platform,
+                        "baseline_value": round(baseline_share, 2),
+                        "current_value": round(current_share, 2),
+                        "threshold": threshold,
+                        "severity": "high" if delta > threshold * 1.5 else "medium",
+                        "supporting_ids": current_ones[:20],
+                        "suggested_action": "Inspect the current seven-day one-star review sample against the preceding seven days.",
+                        "alert_key": f"one_star_spike:{platform}",
+                        "cooldown_until": _cooldown_until(),
+                    }
+                )
+        return alerts
+    finally:
+        conn.close()
+
+
+def _theme_counts(rows: List[Tuple[Any, ...]]) -> Tuple[int, Dict[str, List[str]]]:
+    negative = [row for row in rows if row[1] is not None and row[1] <= 2]
+    counts: Dict[str, List[str]] = {}
+    for review_id, _rating, serialized in negative:
+        try:
+            themes = json.loads(serialized or "[]")
+        except (TypeError, ValueError):
+            themes = []
+        if isinstance(themes, list):
+            for theme in themes:
+                if theme:
