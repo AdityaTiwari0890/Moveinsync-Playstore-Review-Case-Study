@@ -64,3 +64,25 @@ def search_play_store(query: str, country: str = "in", lang: str = "en", limit: 
 def scrape_play_store_reviews(
     package_id: str,
     app_name: str,
+    app_role: str = "employee",
+    count: int = 500,
+    start_date: Optional[datetime.date] = None,
+    end_date: Optional[datetime.date] = None,
+    country: str = "in",
+    lang: str = "en",
+    log_callback: Optional[Callable[[str, str], None]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Collect the most recent reviews available for an Android app from Google Play Store.
+
+    Args:
+        package_id: Package name (e.g. 'com.moveinsync.ets')
+        app_name: Display name of the application
+        app_role: Application role ('employee', 'driver', 'competitor')
+        count: Maximum number of reviews to collect (min 100, default 500)
+        start_date: Optional earliest review date to collect
+        end_date: Optional latest review date to collect
+        country: Two-letter country code (default 'in')
+        lang: Two-letter language code (default 'en')
+        log_callback: Optional callback func(level, message)
+
