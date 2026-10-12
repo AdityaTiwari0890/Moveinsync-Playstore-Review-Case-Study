@@ -124,3 +124,46 @@ def get_index_status(path: str, pending_count: Optional[int] = None) -> Dict[str
             "store_error": None,
         }
     finally:
+        conn.close()
+
+
+def get_document_hashes(path: str) -> Dict[str, str]:
+    conn = _connect(path)
+    try:
+        return {row["document_id"]: row["content_hash"] for row in conn.execute("SELECT document_id, content_hash FROM documents")}
+    finally:
+        conn.close()
+
+
+def write_documents(
+    path: str,
+    documents: Iterable[Dict[str, Any]],
+    embedding_model: str,
+    rebuild: bool = False,
+    active_documents: Optional[Iterable[Dict[str, Any]]] = None,
+) -> int:
+    now = datetime.now(timezone.utc).isoformat()
+    documents = list(documents)
+    active_documents = list(active_documents) if active_documents is not None else documents
+    conn = _connect(path)
+    try:
+        with conn:
+            if rebuild:
+                conn.execute("DELETE FROM documents")
+            conn.executemany(
+                """
+                INSERT INTO documents (document_id, content, content_hash, metadata_json, embedding_json, indexed_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(document_id) DO UPDATE SET
+                    content=excluded.content,
+                    content_hash=excluded.content_hash,
+                    metadata_json=excluded.metadata_json,
+                    embedding_json=excluded.embedding_json,
+                    indexed_at=excluded.indexed_at
+                """,
+                [
+                    (
+                        doc["document_id"],
+                        doc["content"],
+                        doc["content_hash"],
+                        json.dumps(doc["metadata"], ensure_ascii=False),

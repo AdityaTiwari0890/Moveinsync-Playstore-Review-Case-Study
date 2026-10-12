@@ -332,3 +332,59 @@ def _add_report_chunks(
                 "parent_document_id": f"{source_type}:{path.name}:{section}",
                 "chunk_index": offset + 1,
                 "chunk_count": len(chunks),
+            },
+        )
+    counters[counter_key] = base + len(chunks)
+
+
+def inspect_knowledge_sources(
+    workbook_path: str = EXISTING_WORKBOOK,
+    step3_md_path: str = STEP3_MD,
+    action_plan_path: str = STEP3_ACTION_PLAN,
+    db_path: str = DB_PATH,
+) -> Dict[str, Any]:
+    workbook = resolve_project_path(workbook_path)
+    recommendation_path = resolve_project_path(step3_md_path)
+    action_path = resolve_project_path(action_plan_path)
+    report_path = workbook.parent / "MOVEIN_SYNC_ANALYSIS_REPORT.md"
+    errors: List[str] = []
+    missing_sources: List[str] = []
+    sheet_names: List[str] = []
+    review_rows = 0
+    valid_review_rows = 0
+    review_columns: List[str] = []
+
+    if not workbook.exists():
+        errors.append(f"Primary analysis workbook was not found: {workbook}")
+    else:
+        try:
+            with pd.ExcelFile(workbook) as excel:
+                sheet_names = list(excel.sheet_names)
+                if "Combined_Reviews" not in sheet_names:
+                    errors.append("Primary analysis workbook has no Combined_Reviews sheet.")
+                else:
+                    review_frame = pd.read_excel(excel, sheet_name="Combined_Reviews")
+                    review_rows = len(review_frame)
+                    review_columns = [str(column) for column in review_frame.columns]
+                    valid_review_rows = sum(
+                        normalize_review(row.to_dict()) is not None
+                        for _, row in review_frame.iterrows()
+                    )
+        except Exception as exc:
+            errors.append(f"Could not read primary analysis workbook: {exc}")
+
+    optional_sources = [
+        (recommendation_path, "Step 3 recommendation Markdown"),
+        (action_path, "Step 3 action-plan workbook"),
+        (report_path, "analysis report Markdown"),
+    ]
+    for path, label in optional_sources:
+        if not path.exists():
+            missing_sources.append(f"{label}: {path}")
+
+    try:
+        documents = discover_documents(workbook, recommendation_path, action_path, db_path)
+    except Exception as exc:
+        documents = []
+        errors.append(f"Knowledge-source discovery failed: {exc}")
+    chunk_counts: Dict[str, int] = {}
