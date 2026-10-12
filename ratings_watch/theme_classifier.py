@@ -9,3 +9,14 @@ class RatingsWatchClassifier:
     """Thin wrapper over the existing ReviewClassifier for Step 4 monitoring."""
 
     def __init__(self):
+        self._classifier = ReviewClassifier()
+
+    def classify(self, text: Optional[str], rating: Optional[int] = None) -> Dict[str, Any]:
+        result = self._classifier.classify_text(text, rating=rating)
+        themes = result.get("themes") or []
+        if not isinstance(themes, list):
+            themes = [themes]
+        is_unclassified = bool(result.get("is_unclassified")) or "Unclassified" in themes
+        if is_unclassified:
+            themes = []
+        return {

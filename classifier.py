@@ -114,3 +114,42 @@ TAXONOMY_CONFIG = [
             r"\bbad\b", r"\bworst\b", r"\bterrible\b", r"\bhorrible\b", r"\buseless\b",
             r"\bwaste\b", r"\bpathetic\b", r"\bbakwas\b", r"\bghatiya\b", r"\bpoor\b",
         ],
+    },
+]
+
+
+class ReviewClassifier:
+    """
+    Multi-label review classifier supporting keyword/regex patterns,
+    evidence tracing, heuristic confidence, and an explicit Unclassified state.
+    """
+
+    def __init__(self, taxonomy: Optional[List[Dict[str, Any]]] = None):
+        self.taxonomy = taxonomy or TAXONOMY_CONFIG
+
+    def classify_text(self, text: Optional[str], rating: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Classify a single review text string into 0 or more themes.
+
+        Returns:
+            Dict containing:
+                - 'themes': List[str] assigned theme names
+                - 'method': str ('Keyword-Rule-Based')
+                - 'evidence': Dict[str, List[str]] matched tokens per theme
+                - 'heuristic_confidence': str ('High', 'Medium', 'Low', 'None')
+                - 'is_unclassified': bool
+                - 'audit_note': str explanation
+        """
+        cleaned_text = str(text or "").strip()
+
+        # Handle empty or insufficient text
+        if not cleaned_text or len(cleaned_text) < 4:
+            return {
+                "themes": ["Unclassified"],
+                "method": "Keyword-Rule-Based",
+                "evidence": {},
+                "heuristic_confidence": "None",
+                "is_unclassified": True,
+                "audit_note": "Insufficient or missing review text; no defect invented.",
+            }
+

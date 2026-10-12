@@ -567,3 +567,117 @@ def compute_action_priorities(
             "Suggested Success Metric": "Driver duty acceptance rate >= 90%; Driver app Play Store rating >= 4.2★.",
             "Action Rationale": "Supply-side health is essential for reliable fleet operations."
         },
+        {
+            "Theme": "Login and account access",
+            "Priority": "P2 - High",
+            "Severity / Impact": "Medium - Locks users out during shift changes or after enterprise SSO updates.",
+            "Confidence in Evidence": "Medium (Prominent in corporate enterprise logins).",
+            "Estimated Effort": "Low (SSO session token refresh enhancements, clear error messaging for corporate HR database sync).",
+            "Recommended Investigation / Fix": "Improve SSO token refresh failure messaging with direct link to corporate transport helpdesk.",
+            "Suggested Success Metric": "First-attempt login success rate >= 98%.",
+            "Action Rationale": "Prevents user onboarding and daily booking."
+        },
+        {
+            "Theme": "Customer support",
+            "Priority": "P3 - Medium",
+            "Severity / Impact": "Medium - Unresolved grievances exacerbate negative store reviews.",
+            "Confidence in Evidence": "Medium (Mentions of delayed helpline answers).",
+            "Estimated Effort": "Medium (In-app chatbot routing, corporate transport manager SLA dashboard).",
+            "Recommended Investigation / Fix": "Deploy automated trip-delay grievance workflow directly inside app.",
+            "Suggested Success Metric": "First Response Time < 2 minutes for active trip emergencies.",
+            "Action Rationale": "Mitigates escalation from frustrated users to public app store reviews."
+        },
+        {
+            "Theme": "UI and usability",
+            "Priority": "P3 - Medium",
+            "Severity / Impact": "Low to Medium - Friction in discovering roster modifications or pickup points.",
+            "Confidence in Evidence": "Low to Medium (Subjective design feedback).",
+            "Estimated Effort": "Medium (Usability lab testing, UX simplification).",
+            "Recommended Investigation / Fix": "Conduct user testing on roster scheduling screens and clarify button affordances.",
+            "Suggested Success Metric": "Booking completion task time reduced by 25%.",
+            "Action Rationale": "Improves daily commuter satisfaction."
+        },
+    ]
+
+    action_df = pd.DataFrame(priority_matrix)
+    # Merge negative counts from pareto_df if available
+    count_map = pareto_df.set_index("Theme")["Negative Reviews Count"].to_dict()
+    share_map = pareto_df.set_index("Theme")[f"Share of Negative Reviews % (N={total_negative_reviews})"].to_dict()
+
+    action_df["Negative Reviews Count"] = action_df["Theme"].map(count_map).fillna(0).astype(int)
+    action_df[f"Share of Negative Reviews % (N={total_negative_reviews})"] = action_df["Theme"].map(share_map).fillna(0.0)
+
+    # Reorder columns
+    cols = [
+        "Priority", "Theme", "Negative Reviews Count", f"Share of Negative Reviews % (N={total_negative_reviews})",
+        "Severity / Impact", "Confidence in Evidence", "Estimated Effort",
+        "Recommended Investigation / Fix", "Suggested Success Metric", "Action Rationale"
+    ]
+    return action_df[cols].sort_values("Priority")
+
+
+def enhance_workbook_with_analysis(
+    input_filepath: str,
+    output_filepath: str,
+    rating_data: Dict[str, Any],
+    theme_analysis_df: pd.DataFrame,
+    pareto_df: pd.DataFrame,
+    version_df: pd.DataFrame,
+    regression_df: pd.DataFrame,
+    action_df: pd.DataFrame,
+    total_reviews: int,
+    total_negative_reviews: int,
+) -> str:
+    """
+    Load the original workbook with openpyxl, preserve all original raw sheets,
+    and append/update the 5 analysis sheets with native Excel tables and charts.
+    """
+    wb = openpyxl.load_workbook(input_filepath)
+
+    # Idempotent cleanup: remove analysis sheets if they exist from prior runs
+    analysis_sheet_names = [
+        "Rating_Trends", "Theme_Analysis", "Version_Analysis", "Pareto_Analysis", "Action_Priorities"
+    ]
+    for name in analysis_sheet_names:
+        if name in wb.sheetnames:
+            wb.remove(wb[name])
+
+    # Shared Styling
+    header_font = Font(name="Calibri", size=11, bold=True, color=WHITE_TEXT)
+    header_fill = PatternFill(start_color=NAVY_HEADER, end_color=NAVY_HEADER, fill_type="solid")
+    section_fill = PatternFill(start_color=SECTION_HEADER, end_color=SECTION_HEADER, fill_type="solid")
+    regular_font = Font(name="Calibri", size=10)
+    thin_border = Border(
+        left=Side(style="thin", color=BORDER_GRAY),
+        right=Side(style="thin", color=BORDER_GRAY),
+        top=Side(style="thin", color=BORDER_GRAY),
+        bottom=Side(style="thin", color=BORDER_GRAY),
+    )
+
+    # -------------------------------------------------------------
+    # 1. Sheet: Rating_Trends
+    # -------------------------------------------------------------
+    ws_rt = wb.create_sheet(title="Rating_Trends")
+    ws_rt.append(["SECTION 1: RATING OVERVIEW & SEGMENT BENCHMARKS"])
+    ws_rt.cell(row=1, column=1).font = Font(name="Calibri", size=12, bold=True, color=WHITE_TEXT)
+    ws_rt.cell(row=1, column=1).fill = section_fill
+
+    overview_df = rating_data["overview_table"]
+    ws_rt.append(overview_df.columns.tolist())
+    for _, row in overview_df.iterrows():
+        ws_rt.append(row.tolist())
+
+    ws_rt.append([])  # Spacer
+
+    r_idx = ws_rt.max_row + 1
+    ws_rt.cell(row=r_idx, column=1, value="SECTION 2: MONTHLY REVIEW VOLUME & RATING TRAJECTORY")
+    ws_rt.cell(row=r_idx, column=1).font = Font(name="Calibri", size=12, bold=True, color=WHITE_TEXT)
+    ws_rt.cell(row=r_idx, column=1).fill = section_fill
+
+    monthly_df = rating_data["monthly_table"]
+    monthly_start_row = ws_rt.max_row + 1
+    ws_rt.append(monthly_df.columns.tolist())
+    for _, row in monthly_df.iterrows():
+        ws_rt.append(row.tolist())
+
+    # 1. Add BarChart for Star Rating Distribution (1★ to 5★)

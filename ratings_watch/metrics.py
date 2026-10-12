@@ -78,3 +78,19 @@ def get_review_counts(db_path: str, platform: str = "all") -> Dict[str, int]:
     rows = conn.execute(query, params).fetchall()
     total = sum(int(r[1]) for r in rows)
     return {"total": total, "by_platform": {r[0]: int(r[1]) for r in rows}}
+
+
+def get_negative_review_share(db_path: str, platform: str = "all", start_date: Optional[str] = None, end_date: Optional[str] = None) -> float:
+    conn = sqlite3.connect(db_path)
+    query = "SELECT COUNT(*) FROM reviews WHERE 1=1"
+    params: List[Any] = []
+    if platform != "all":
+        query += " AND platform = ?"
+        params.append(platform)
+    if start_date:
+        query += " AND review_date >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND review_date <= ?"
+        params.append(end_date)
+    total_rows = conn.execute(query, params).fetchone()[0]
