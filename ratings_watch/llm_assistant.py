@@ -43,3 +43,25 @@ class LLMAssistant:
             return "OLLAMA_MODEL is not configured."
         if operation == "embedding" and not self.embedding_model:
             return "OLLAMA_EMBEDDING_MODEL is not configured."
+        if not self._is_local() and is_placeholder_api_key(self.api_key):
+            return "Hosted Ollama is configured, but API_KEY is missing or is still a placeholder. Add a valid key to the project .env file."
+        return None
+
+    def available(self) -> bool:
+        return self.configuration_error("chat") is None
+
+    def _headers(self) -> Dict[str, str]:
+        headers = {"Content-Type": "application/json"}
+        if not self._is_local() and not is_placeholder_api_key(self.api_key):
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _response_error(self, response: requests.Response, operation: str) -> str:
+        detail = ""
+        try:
+            body = response.json()
+            if isinstance(body, dict):
+                detail = str(body.get("error") or body.get("message") or "")
+        except (ValueError, TypeError):
+            pass
+        if self.api_key:
