@@ -388,3 +388,59 @@ def inspect_knowledge_sources(
         documents = []
         errors.append(f"Knowledge-source discovery failed: {exc}")
     chunk_counts: Dict[str, int] = {}
+    document_ids: Dict[str, set[str]] = {}
+    for document in documents:
+        source_type = str(document["metadata"].get("source_type") or "unknown")
+        chunk_counts[source_type] = chunk_counts.get(source_type, 0) + 1
+        document_ids.setdefault(source_type, set()).add(
+            str(document["metadata"].get("parent_document_id") or document["document_id"])
+        )
+    document_counts = {source: len(ids) for source, ids in document_ids.items()}
+    total_documents = sum(document_counts.values())
+
+    return {
+        "workbook_path": str(workbook),
+        "workbook_exists": workbook.exists(),
+        "workbook_sheets": sheet_names,
+        "review_columns": review_columns,
+        "review_source_rows": review_rows,
+        "valid_review_source_rows": valid_review_rows,
+        "invalid_review_source_rows": review_rows - valid_review_rows,
+        "review_documents": document_counts.get("review", 0),
+        "analysis_documents": document_counts.get("analysis", 0),
+        "recommendation_documents": document_counts.get("recommendation", 0),
+        "report_documents": document_counts.get("report", 0),
+        "total_documents_generated": total_documents,
+        "total_chunks_generated": len(documents),
+        "counts_by_source": document_counts,
+        "chunks_by_source": chunk_counts,
+        "missing_sources": missing_sources,
+        "errors": errors,
+    }
+
+
+def index_knowledge_base(
+    rebuild: bool = False,
+    workbook_path: str = EXISTING_WORKBOOK,
+    step3_md_path: str = STEP3_MD,
+    action_plan_path: str = STEP3_ACTION_PLAN,
+    db_path: str = DB_PATH,
+    vector_path: str = VECTOR_STORE_PATH,
+    assistant: Optional[LLMAssistant] = None,
+) -> Dict[str, Any]:
+    client = assistant or LLMAssistant()
+    workbook_path = str(resolve_project_path(workbook_path))
+    step3_md_path = str(resolve_project_path(step3_md_path))
+    action_plan_path = str(resolve_project_path(action_plan_path))
+    db_path = str(resolve_project_path(db_path))
+    vector_path = str(resolve_project_path(vector_path))
+    source_status = inspect_knowledge_sources(
+        workbook_path, step3_md_path, action_plan_path, db_path
+    )
+    documents = discover_documents(workbook_path, step3_md_path, action_plan_path, db_path)
+    if not documents:
+        message = "; ".join(source_status["errors"]) or (
+            "No review, report, recommendation, or monitoring documents were found to index."
+        )
+        record_index_error(vector_path, message)
+        raise ValueError(message)

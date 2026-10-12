@@ -167,3 +167,45 @@ def write_documents(
                         doc["content"],
                         doc["content_hash"],
                         json.dumps(doc["metadata"], ensure_ascii=False),
+                        json.dumps(doc["embedding"]),
+                        now,
+                    )
+                    for doc in documents
+                ],
+            )
+            if not rebuild and documents:
+                changed_parents = {
+                    str(doc["metadata"].get("parent_document_id") or doc["document_id"])
+                    for doc in documents
+                }
+                active_ids = {
+                    doc["document_id"]
+                    for doc in active_documents
+                    if str(doc["metadata"].get("parent_document_id") or doc["document_id"])
+                    in changed_parents
+                }
+                stale_ids = []
+                for row in conn.execute("SELECT document_id, metadata_json FROM documents"):
+                    try:
+                        metadata = json.loads(row["metadata_json"])
+                    except (TypeError, ValueError):
+                        metadata = {}
+                    parent_id = str(metadata.get("parent_document_id") or row["document_id"])
+                    if parent_id in changed_parents and row["document_id"] not in active_ids:
+                        stale_ids.append((row["document_id"],))
+                conn.executemany(
+                    "DELETE FROM documents WHERE document_id=?",
+                    stale_ids,
+                )
+            conn.execute(
+                "INSERT INTO index_state(key, value) VALUES('last_indexed_at', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (now,),
+            )
+            conn.execute(
+                "INSERT INTO index_state(key, value) VALUES('embedding_model', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (embedding_model,),
+            )
+            conn.execute("DELETE FROM index_state WHERE key='last_error'")
+        return len(documents)
+    finally:
+        conn.close()
