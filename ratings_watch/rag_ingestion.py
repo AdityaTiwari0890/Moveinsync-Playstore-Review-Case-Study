@@ -444,3 +444,59 @@ def index_knowledge_base(
         )
         record_index_error(vector_path, message)
         raise ValueError(message)
+    previous_status = get_index_status(vector_path)
+    can_reuse_index = bool(
+        not rebuild
+        and not previous_status.get("store_error")
+        and previous_status["invalid_vector_count"] == 0
+        and previous_status["persisted_record_count"] == previous_status["document_count"]
+        and previous_status.get("embedding_model") == client.embedding_model
+    )
+    existing = get_document_hashes(vector_path) if can_reuse_index else {}
+    pending = [doc for doc in documents if existing.get(doc["document_id"]) != doc["content_hash"]]
+    to_embed = documents if rebuild else pending
+    failed_document_ids: List[str] = []
+    try:
+        if to_embed:
+            configuration_error = client.configuration_error("embedding")
+            if configuration_error:
+                raise RuntimeError(configuration_error)
+            vectors: List[List[float]] = []
+            for start in range(0, len(to_embed), 32):
+                batch = to_embed[start : start + 32]
+                try:
+                    batch_vectors = client.embed([doc["content"] for doc in batch])
+                except Exception as exc:
+                    failed_document_ids = [doc["document_id"] for doc in batch]
+                    ids = [doc["document_id"] for doc in batch[:3]]
+                    raise RuntimeError(
+                        f"Embedding failed for batch starting at document {start + 1}; "
+                        f"{len(batch)} document(s) were not persisted. "
+                        f"First document IDs: {ids}. Cause: {exc}"
+                    ) from exc
+                vectors.extend(batch_vectors)
+            if len(vectors) != len(to_embed):
+                raise RuntimeError("Embedding service returned a mismatched vector count; the existing index was preserved.")
+            if any(not isinstance(vector, list) or not vector for vector in vectors):
+                raise RuntimeError("Embedding service returned an empty or invalid vector; the existing index was preserved.")
+            for doc, vector in zip(to_embed, vectors):
+                doc["embedding"] = vector
+            write_documents(
+                vector_path,
+                to_embed,
+                client.embedding_model,
+                rebuild=rebuild,
+                active_documents=documents,
+            )
+        persisted_hashes = get_document_hashes(vector_path)
+        missing_after_write = [
+            doc["document_id"]
+            for doc in documents
+            if persisted_hashes.get(doc["document_id"]) != doc["content_hash"]
+        ]
+        if missing_after_write:
+            raise RuntimeError(
+                f"Persistent index verification failed after reopening: "
+                f"{len(missing_after_write)} expected document(s) are missing or stale."
+            )
+        index_status = get_index_status(vector_path, pending_count=0)

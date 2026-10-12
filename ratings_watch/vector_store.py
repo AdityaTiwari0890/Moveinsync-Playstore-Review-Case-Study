@@ -209,3 +209,45 @@ def write_documents(
         return len(documents)
     finally:
         conn.close()
+
+
+def record_index_error(path: str, message: str) -> None:
+    conn = _connect(path)
+    try:
+        with conn:
+            conn.execute(
+                "INSERT INTO index_state(key, value) VALUES('last_error', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (message[:500],),
+            )
+    finally:
+        conn.close()
+
+
+def clear_index_error(path: str) -> None:
+    conn = _connect(path)
+    try:
+        with conn:
+            conn.execute("DELETE FROM index_state WHERE key='last_error'")
+    finally:
+        conn.close()
+
+
+def search_documents(
+    path: str,
+    query_embedding: List[float],
+    limit: int = 6,
+    filters: Optional[Dict[str, Any]] = None,
+) -> List[Dict[str, Any]]:
+    if not query_embedding or limit < 1:
+        return []
+    filters = filters or {}
+    conn = _connect(path)
+    try:
+        rows = conn.execute("SELECT document_id, content, metadata_json, embedding_json FROM documents").fetchall()
+    finally:
+        conn.close()
+
+    query_norm = sum(value * value for value in query_embedding) ** 0.5
+    if not query_norm:
+        return []
+    matches = []
