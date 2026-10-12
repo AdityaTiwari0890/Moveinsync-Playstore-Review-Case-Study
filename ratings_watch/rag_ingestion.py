@@ -165,3 +165,59 @@ def discover_documents(
                                 "is_unclassified": review.get("is_unclassified", False),
                                 "original_review_text": text,
                             },
+                        )
+                    continue
+                for index, row in frame.iterrows():
+                    fields = [(str(key), _text(value)) for key, value in row.to_dict().items()]
+                    fields = [(key, value) for key, value in fields if value]
+                    if not fields:
+                        continue
+                    body = "\n".join(f"{key}: {value}" for key, value in fields)
+                    doc_id = f"workbook:{workbook}:{sheet}:{int(index) + 2}"
+                    _add_chunked_document(
+                        documents,
+                        doc_id,
+                        f"Workbook: {workbook.name}\nSheet: {sheet}\nSource row: {int(index) + 2}\n{body}",
+                        {
+                            "source_type": "analysis",
+                            "source_name": workbook.name,
+                            "source_path": str(workbook),
+                            "sheet": sheet,
+                            "row": int(index) + 2,
+                        },
+                    )
+
+    for path, doc_type in ((step3_md, "recommendation"),):
+        if not path.exists():
+            continue
+        content = path.read_text(encoding="utf-8", errors="replace")
+        section = "Document"
+        section_chunks: Dict[str, int] = {}
+        buffer: List[str] = []
+        for line in content.splitlines():
+            if line.startswith("#"):
+                if buffer:
+                    _add_report_chunks(documents, path, doc_type, section, "\n".join(buffer), section_chunks)
+                section = line.lstrip("#").strip() or "Document"
+                buffer = [line]
+            else:
+                buffer.append(line)
+        if buffer:
+            _add_report_chunks(documents, path, doc_type, section, "\n".join(buffer), section_chunks)
+
+    report_path = workbook.parent / "MOVEIN_SYNC_ANALYSIS_REPORT.md"
+    if report_path.exists():
+        content = report_path.read_text(encoding="utf-8", errors="replace")
+        sections: Dict[str, int] = {}
+        _add_report_chunks(documents, report_path, "report", "Full report", content, sections)
+
+    action_path = action_plan
+    if action_path.exists():
+        with pd.ExcelFile(action_path) as excel:
+            for sheet in excel.sheet_names:
+                frame = pd.read_excel(excel, sheet_name=sheet)
+                for index, row in frame.iterrows():
+                    fields = [(str(key), _text(value)) for key, value in row.to_dict().items()]
+                    fields = [(key, value) for key, value in fields if value]
+                    if not fields:
+                        continue
