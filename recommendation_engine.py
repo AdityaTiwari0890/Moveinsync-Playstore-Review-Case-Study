@@ -899,3 +899,153 @@ def _add_excel_table(ws, table_name: str, start_row: int, end_row: int, style: s
 
 def generate_action_plan_xlsx(
     priority_df: pd.DataFrame,
+    impact_effort_df: pd.DataFrame,
+    strategy_df: pd.DataFrame,
+    metrics: Dict[str, Any],
+    output_path: str,
+) -> str:
+    """
+    Write MOVEIN_SYNC_ACTION_PLAN.xlsx with 4 sheets:
+      1. Priority_Matrix
+      2. Impact_Effort_Matrix
+      3. Rating_Strategy
+      4. Success_Metrics
+    """
+    wb = openpyxl.Workbook()
+
+    # Remove default sheet
+    if "Sheet" in wb.sheetnames:
+        wb.remove(wb["Sheet"])
+
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    # -----------------------------------------------------------------
+    # Sheet 1: Priority_Matrix
+    # -----------------------------------------------------------------
+    ws1 = wb.create_sheet("Priority_Matrix")
+    ws1.append([f"MOVEIN SYNC — Priority Matrix  |  Generated: {ts}  |  Source: App_Review_Intelligence_MoveInSync_20261012_173118_Analyzed.xlsx"])
+    ws1.cell(row=1, column=1).font = Font(name="Calibri", size=11, bold=True, color=WHITE)
+    ws1.cell(row=1, column=1).fill = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
+    ws1.row_dimensions[1].height = 20
+
+    if not priority_df.empty:
+        cols_to_write = [c for c in priority_df.columns if c != "Priority Score"]
+        ws1.append(cols_to_write)
+        header_row = 2
+        _style_header_row(ws1, header_row, len(cols_to_write))
+        data_start = 3
+        for _, row in priority_df.iterrows():
+            ws1.append([row[c] for c in cols_to_write])
+        _style_data_rows(ws1, data_start, ws1.max_row)
+        _add_excel_table(ws1, "Table_Priority_Matrix", header_row, ws1.max_row)
+        ws1.freeze_panes = f"A{data_start}"
+    _auto_col_widths(ws1)
+
+    # -----------------------------------------------------------------
+    # Sheet 2: Impact_Effort_Matrix
+    # -----------------------------------------------------------------
+    ws2 = wb.create_sheet("Impact_Effort_Matrix")
+    ws2.append([f"Impact vs. Effort Matrix  |  Generated: {ts}"])
+    ws2.cell(row=1, column=1).font = Font(name="Calibri", size=11, bold=True, color=WHITE)
+    ws2.cell(row=1, column=1).fill = PatternFill(start_color=MID_BLUE, end_color=MID_BLUE, fill_type="solid")
+
+    note_text = (
+        "NOTE: 'Impact' is derived from measured negative-review share (workbook data). "
+        "'Effort' is a qualitative engineering estimate — treat as directional, not definitive."
+    )
+    ws2.append([note_text])
+    ws2.cell(row=2, column=1).font = Font(name="Calibri", size=9, italic=True)
+
+    if not impact_effort_df.empty:
+        header_row = 3
+        ws2.append(impact_effort_df.columns.tolist())
+        _style_header_row(ws2, header_row, len(impact_effort_df.columns))
+        data_start = 4
+        for _, row in impact_effort_df.iterrows():
+            ws2.append(row.tolist())
+        _style_data_rows(ws2, data_start, ws2.max_row)
+        _add_excel_table(ws2, "Table_Impact_Effort", header_row, ws2.max_row)
+        ws2.freeze_panes = f"A{data_start}"
+    _auto_col_widths(ws2)
+
+    # -----------------------------------------------------------------
+    # Sheet 3: Rating_Strategy
+    # -----------------------------------------------------------------
+    ws3 = wb.create_sheet("Rating_Strategy")
+    ws3.append([f"Rating Improvement Strategy  |  Generated: {ts}"])
+    ws3.cell(row=1, column=1).font = Font(name="Calibri", size=11, bold=True, color=WHITE)
+    ws3.cell(row=1, column=1).fill = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
+
+    ws3.append([
+        "⚠ Prohibited approaches (not included): Incentivized reviews | Review gating | "
+        "Selective suppression of negative feedback | Fabricated ratings"
+    ])
+    ws3.cell(row=2, column=1).font = Font(name="Calibri", size=9, bold=True, color=ALERT_RED)
+
+    if not strategy_df.empty:
+        header_row = 3
+        ws3.append(strategy_df.columns.tolist())
+        _style_header_row(ws3, header_row, len(strategy_df.columns))
+        data_start = 4
+        for _, row in strategy_df.iterrows():
+            ws3.append(row.tolist())
+        _style_data_rows(ws3, data_start, ws3.max_row)
+        _add_excel_table(ws3, "Table_Rating_Strategy", header_row, ws3.max_row)
+        ws3.freeze_panes = f"A{data_start}"
+    _auto_col_widths(ws3)
+
+    # -----------------------------------------------------------------
+    # Sheet 4: Success_Metrics
+    # -----------------------------------------------------------------
+    ws4 = wb.create_sheet("Success_Metrics")
+    ws4.append([f"Success Metrics Register  |  Generated: {ts}"])
+    ws4.cell(row=1, column=1).font = Font(name="Calibri", size=11, bold=True, color=WHITE)
+    ws4.cell(row=1, column=1).fill = PatternFill(start_color=NAVY, end_color=NAVY, fill_type="solid")
+
+    ws4.append(["Metric", "Theme / Initiative", "Baseline", "Target", "Measurement Window",
+                "Responsible Team", "Measurement Method", "Status"])
+    _style_header_row(ws4, 2, 8)
+
+    success_rows = []
+    if not priority_df.empty:
+        for _, r in priority_df.iterrows():
+            theme = r["Theme"]
+            metric_text = r["Suggested Success Metric"]
+            # Extract baseline vs target heuristically
+            if "baseline:" in metric_text.lower():
+                parts = metric_text.lower().split("baseline:")
+                target_part = metric_text[:metric_text.lower().index("baseline:")].strip().rstrip(";").rstrip("(")
+                baseline_part = metric_text[metric_text.lower().index("baseline:") + 9:].strip().rstrip(")")
+            else:
+                target_part = metric_text
+                baseline_part = "Requires confirmation from internal telemetry / logs"
+
+            success_rows.append([
+                theme,
+                theme,
+                baseline_part[:200],
+                target_part[:200],
+                "Measure at 30, 60, 90 days post-fix deployment",
+                r["Owner Team"],
+                "App store review analysis (re-run Step 2 engine) + internal telemetry",
+                "Open",
+            ])
+
+    for sr_row in success_rows:
+        ws4.append(sr_row)
+
+    if success_rows:
+        _style_data_rows(ws4, 3, ws4.max_row)
+        _add_excel_table(ws4, "Table_Success_Metrics", 2, ws4.max_row)
+        ws4.freeze_panes = "A3"
+    _auto_col_widths(ws4)
+
+    wb.save(output_path)
+    return output_path
+
+
+# ===========================================================================
+# MARKDOWN REPORT GENERATOR
+# ===========================================================================
+
+def generate_recommendations_md(
