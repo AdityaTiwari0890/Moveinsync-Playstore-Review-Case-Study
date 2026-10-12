@@ -523,3 +523,68 @@ def _knowledge_base(db_path: str, vector_path: str) -> None:
         "rag_readiness": "Ready" if full_ready else "Not ready",
         "index_reopen_validation": "Passed" if index_ready else "Not ready",
         "workbook_path": source_status["workbook_path"],
+        "workbook_exists": source_status["workbook_exists"],
+        "workbook_sheets_discovered": source_status["workbook_sheets"],
+        "review_source_rows": source_status["review_source_rows"],
+        "valid_review_source_rows": source_status["valid_review_source_rows"],
+        "invalid_review_source_rows": source_status["invalid_review_source_rows"],
+        "review_documents_available": source_status["review_documents"],
+        "analytical_documents_available": source_status["analysis_documents"],
+        "recommendation_documents_available": source_status["recommendation_documents"],
+        "report_documents_available": source_status["report_documents"],
+        "total_chunks_generated": source_status["total_chunks_generated"],
+        "persisted_documents": status["document_count"],
+        "persisted_vectors": status["persisted_vector_count"],
+        "invalid_or_missing_vectors": status["invalid_vector_count"],
+        "embedding_model": status.get("embedding_model") or OLLAMA_EMBEDDING_MODEL,
+        "embedding_provider": connection.get("provider") if connection else "Not tested",
+        "vector_store_path": status["path"],
+        "last_successful_index": status.get("last_indexed_at"),
+        "new_or_changed_documents_awaiting_index": status.get("pending_count"),
+        "last_indexing_error": status.get("last_error"),
+        "vector_store_open_error": status.get("store_error"),
+        "chat_model_status": (
+            "Connected" if connection and connection.get("chat", {}).get("ok")
+            else connection.get("chat", {}).get("error", "Not tested") if connection else "Not tested"
+        ),
+        "embedding_model_status": (
+            "Connected" if connection and connection.get("embedding", {}).get("ok")
+            else connection.get("embedding", {}).get("error", "Not tested") if connection else "Not tested"
+        ),
+        "missing_optional_sources": source_status["missing_sources"],
+        "source_errors": source_status["errors"],
+    })
+    st.caption("The index is genuine RAG ingestion, not model fine-tuning. New and changed records are embedded incrementally.")
+    test_col, refresh_col = st.columns(2)
+    with test_col:
+        if st.button("Test Ollama Connection"):
+            with st.spinner("Testing configured chat and embedding models independently..."):
+                result = LLMAssistant().test_connection()
+            st.session_state["rw_ollama_connection_status"] = result
+            if result["ready"]:
+                st.success("Chat and embeddings are both responding.")
+            else:
+                st.error("Ollama is not fully ready. See the separate chat and embedding errors below.")
+            st.json(result, expanded=False)
+    with refresh_col:
+        if st.button("Refresh Knowledge-Base Status"):
+            st.rerun()
+    left, right = st.columns(2)
+    with left:
+        if st.button("Index Knowledge Base"):
+            with st.spinner("Reading artifacts and requesting embeddings from Ollama..."):
+                try:
+                    result = index_knowledge_base(
+                        workbook_path=EXISTING_WORKBOOK,
+                        step3_md_path=STEP3_MD,
+                        action_plan_path=STEP3_ACTION_PLAN,
+                        db_path=db_path,
+                        vector_path=vector_path,
+                    )
+                    st.success(f"Indexed {result['updated']} new or changed documents; {result['unchanged']} unchanged.")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(str(exc))
+    with right:
+        if st.button("Rebuild Knowledge Base"):
+            with st.spinner("Building a replacement index; the previous index remains until embeddings succeed..."):
