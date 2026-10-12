@@ -129,3 +129,68 @@ def _theme_list(raw: Any) -> List[str]:
 
 def _filtered_review_data(db_path: str, filters: Dict[str, Any]) -> pd.DataFrame:
     rows = _review_query(db_path, filters)
+    data = pd.DataFrame(rows)
+    if filters.get("theme") and not data.empty:
+        data = data[data["assigned_themes"].apply(lambda value: filters["theme"] in _theme_list(value))]
+    return data
+
+
+def _theme_rows(data: pd.DataFrame, negative_only: bool = False) -> pd.DataFrame:
+    if data.empty:
+        return pd.DataFrame(columns=["theme", "review_count", "average_rating"])
+    if negative_only and "rating" in data:
+        data = data[data["rating"] <= 2]
+    flattened = []
+    for _, row in data.iterrows():
+        for theme in _theme_list(row.get("assigned_themes")):
+            flattened.append({"theme": theme, "rating": row.get("rating"), "platform": row.get("platform")})
+    if not flattened:
+        return pd.DataFrame(columns=["theme", "review_count", "average_rating"])
+    return (
+        pd.DataFrame(flattened)
+        .groupby("theme", as_index=False)
+        .agg(review_count=("rating", "size"), average_rating=("rating", "mean"))
+        .sort_values("review_count", ascending=False)
+    )
+
+
+def _render_chat(db_path: str, vector_path: str, key_suffix: str, filters: Optional[Dict[str, Any]] = None) -> None:
+    chat_key = f"rw_chat_{key_suffix}"
+    st.session_state.setdefault(chat_key, [])
+    for item in st.session_state[chat_key]:
+        with st.chat_message(item["role"]):
+            st.markdown(item["content"])
+            if item.get("evidence"):
+                with st.expander(f"Evidence ({len(item['evidence'])} sources)"):
+                    for evidence in item["evidence"]:
+                        metadata = evidence["metadata"]
+                        identifier = metadata.get("review_id") or metadata.get("source_name")
+                        st.markdown(
+                            f"**[{evidence['citation']}] {identifier}** · "
+                            f"{metadata.get('platform') or metadata.get('sheet') or metadata.get('section') or metadata.get('source_type')}"
+                        )
+                        st.caption(evidence["content"][:1200])
+            if item.get("metrics"):
+                with st.expander("Verified structured metrics and filters"):
+                    st.json({"filters": item.get("filters"), "metrics": item["metrics"]})
+    prompt = st.chat_input("Ask about ratings, complaints, evidence, or recommendations", key=f"chat_input_{key_suffix}")
+    if prompt:
+        previous = st.session_state[chat_key]
+        st.session_state[chat_key].append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        with st.chat_message("assistant"):
+            with st.spinner("Retrieving evidence and checking structured metrics..."):
+                result = ask_analyst(
+                    prompt,
+                    db_path=db_path,
+                    vector_path=vector_path,
+                    conversation=previous,
+                    context_filters=filters,
+                )
+            if result.get("ok"):
+                st.markdown(result["answer"])
+                if result.get("evidence"):
+                    with st.expander(f"Evidence ({len(result['evidence'])} sources)"):
+                        for evidence in result["evidence"]:
+                            metadata = evidence["metadata"]
