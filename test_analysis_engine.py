@@ -228,3 +228,61 @@ class TestAnalysisEngine(unittest.TestCase):
         wb_mock = openpyxl.Workbook()
         ws_comb = wb_mock.active
         ws_comb.title = "Combined_Reviews"
+        ws_comb.append(["App Name", "Platform", "App Role", "Rating", "Review Text", "Review Date", "App Version", "Review ID"])
+        for i in range(25):
+            ws_comb.append(["MoveInSync", "Android", "employee", 1 if i % 2 == 0 else 5, "Cab delay and crash", "2026-10-10", "12.0", f"id_{i}"])
+
+        # Add a dummy App_Summary sheet
+        ws_sum = wb_mock.create_sheet("App_Summary")
+        ws_sum.append(["Store Title", "Developer"])
+        ws_sum.append(["MoveInSync", "MoveInSync"])
+        wb_mock.save(input_test_file)
+
+        # Run pipeline helpers
+        df, _ = load_and_normalize_workbook(input_test_file)
+        rating_data = compute_rating_analysis(df, min_sample=15)
+        clf = ReviewClassifier()
+        df_clf, theme_df, pareto_df = compute_theme_and_pareto_analysis(df, clf)
+        v_df, reg_df = compute_version_analysis(df_clf, min_sample=15)
+        act_df = compute_action_priorities(pareto_df, theme_df, 13)
+
+        enhance_workbook_with_analysis(
+            input_filepath=input_test_file,
+            output_filepath=output_test_file,
+            rating_data=rating_data,
+            theme_analysis_df=theme_df,
+            pareto_df=pareto_df,
+            version_df=v_df,
+            regression_df=reg_df,
+            action_df=act_df,
+            total_reviews=25,
+            total_negative_reviews=13,
+        )
+
+        self.assertTrue(os.path.exists(output_test_file))
+
+        # Inspect resulting workbook
+        wb_res = openpyxl.load_workbook(output_test_file)
+        # Verify raw sheets preserved
+        self.assertIn("Combined_Reviews", wb_res.sheetnames)
+        self.assertIn("App_Summary", wb_res.sheetnames)
+
+        # Verify 5 new analysis sheets created
+        expected_new_sheets = ["Rating_Trends", "Theme_Analysis", "Version_Analysis", "Pareto_Analysis", "Action_Priorities"]
+        for s in expected_new_sheets:
+            self.assertIn(s, wb_res.sheetnames, f"Expected sheet '{s}' in workbook")
+
+        # Verify charts exist on Rating_Trends and Pareto_Analysis
+        self.assertGreaterEqual(len(wb_res["Rating_Trends"]._charts), 1, "Rating_Trends should contain openpyxl chart")
+        self.assertGreaterEqual(len(wb_res["Pareto_Analysis"]._charts), 1, "Pareto_Analysis should contain openpyxl chart")
+
+        wb_res.close()
+
+        # Clean up test files
+        for f in (input_test_file, output_test_file):
+            if os.path.exists(f):
+                os.remove(f)
+
+
+if __name__ == "__main__":
+    unittest.main()
