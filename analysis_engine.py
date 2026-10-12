@@ -339,3 +339,117 @@ def compute_theme_and_pareto_analysis(
         all_theme_rows.append({
             "Theme": t_name,
             "Description": t_desc,
+            "Total Mentions": t_count,
+            "% of All Reviews (N={})".format(total_reviews): round(t_count / total_reviews * 100, 1),
+            "Average Rating": avg_r,
+            "Negative Mentions (1★+2★)": neg_count,
+            "Negative Rate %": neg_rate,
+            "Employee Mentions": emp_count,
+            "Driver Mentions": drv_count,
+            "Android Mentions": and_count,
+            "iOS Mentions": ios_count,
+            "Sample Negative Excerpts": sample_quotes,
+        })
+
+    theme_analysis_df = pd.DataFrame(all_theme_rows).sort_values("Negative Mentions (1★+2★)", ascending=False)
+
+    # --- Table 2: Pareto 80/20 Analysis on 1★ & 2★ Negative Reviews ---
+    df_negative = df_classified[df_classified["rating"].isin([1, 2])].copy()
+    total_negative_reviews = len(df_negative)
+
+    pareto_rows = []
+    # Count occurrences across all 11 categories
+    for item in classifier.taxonomy:
+        t_name = item["theme"]
+        mask = df_negative["assigned_themes"].apply(lambda themes: t_name in themes)
+        c = mask.sum()
+
+        share_neg = round(c / total_negative_reviews * 100, 1) if total_negative_reviews > 0 else 0.0
+        ci_l, ci_u = wilson_confidence_interval(c, total_negative_reviews)
+
+        pareto_rows.append({
+            "Theme": t_name,
+            "Negative Reviews Count": int(c),
+            "Share of Negative Reviews % (N={})".format(total_negative_reviews): share_neg,
+            "Wilson 95% CI Lower": ci_l,
+            "Wilson 95% CI Upper": ci_u,
+        })
+
+    # Sort descending by frequency
+    pareto_df = pd.DataFrame(pareto_rows).sort_values("Negative Reviews Count", ascending=False).reset_index(drop=True)
+
+    # Calculate cumulative counts and cumulative percentage of total theme mentions
+    total_mentions_sum = pareto_df["Negative Reviews Count"].sum()
+    pareto_df["Cumulative Mentions"] = pareto_df["Negative Reviews Count"].cumsum()
+    pareto_df["Cumulative Share %"] = round(
+        pareto_df["Cumulative Mentions"] / total_mentions_sum * 100, 1
+    ) if total_mentions_sum > 0 else 0.0
+
+    # Pareto Status: Demarcate Vital Few (up to ~75-80% cutoff) vs Remaining
+    pareto_status = []
+    threshold_crossed = False
+    for idx, row in pareto_df.iterrows():
+        cum = row["Cumulative Share %"]
+        if not threshold_crossed:
+            pareto_status.append("Vital Few (Pareto 80% Core)")
+            if cum >= 75.0:
+                threshold_crossed = True
+        else:
+            pareto_status.append("Remaining Long Tail")
+    pareto_df["Pareto Classification"] = pareto_status
+
+    return df_classified, theme_analysis_df, pareto_df
+
+
+def compute_version_analysis(
+    df: pd.DataFrame,
+    min_sample: int = 15,
+    rating_drop_threshold: float = 0.30,
+    neg_jump_threshold: float = 15.0,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Group reviews by app version, compute metrics, flag small sample sizes,
+    and detect potential sequential release regressions.
+    """
+    version_groups = []
+    flagged_regressions = []
+
+    # Group by App Name, Platform, App Version
+    grouped = df.groupby(["app_name", "platform", "app_version_clean"])
+
+    for (app, plat, ver), sub_df in grouped:
+        n = len(sub_df)
+        avg_r = round(sub_df["rating"].mean(), 2)
+        neg_count = (sub_df["rating"].isin([1, 2])).sum()
+        neg_rate = round(neg_count / n * 100, 1)
+        ci_l, ci_u = wilson_confidence_interval(neg_count, n)
+
+        dates = sub_df["review_date"].dropna().astype(str).tolist()
+        dates_sorted = sorted(dates) if dates else []
+        earliest_date = dates_sorted[0][:10] if dates_sorted else "N/A"
+        latest_date = dates_sorted[-1][:10] if dates_sorted else "N/A"
+
+        # Determine top 2 complaint themes for this version
+        theme_counts = defaultdict(int)
+        for _, r in sub_df[sub_df["rating"].isin([1, 2])].iterrows():
+            for t in r.get("assigned_themes", []):
+                if t not in ("Unclassified", "Other or unclear"):
+                    theme_counts[t] += 1
+        top_themes = ", ".join([k for k, _ in sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)[:2]]) or "None specific"
+
+        sample_flag = "Sufficient" if n >= min_sample else f"Low Sample (N < {min_sample})"
+
+        version_groups.append({
+            "App Name": app,
+            "Platform": plat,
+            "App Version": ver,
+            "Sample Size (N)": n,
+            "Sample Size Flag": sample_flag,
+            "Average Rating": avg_r,
+            "Negative Rate %": neg_rate,
+            "Wilson 95% CI Lower": ci_l,
+            "Wilson 95% CI Upper": ci_u,
+            "Earliest Review Date": earliest_date,
+            "Latest Review Date": latest_date,
+            "Top Complaint Themes": top_themes,
+        })

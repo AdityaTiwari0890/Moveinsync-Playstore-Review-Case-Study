@@ -46,3 +46,19 @@ def get_rating_summary(db_path: str, platform: str = "all", start_date: Optional
         "average_rating": round(avg, 2),
         "total_reviews": total_reviews,
         "negative_share": round((negative_count / total_reviews) * 100, 2) if total_reviews else 0.0,
+        "one_star_count": sum(1 for r in ratings if r == 1),
+        "most_common_theme": most_common.most_common(1)[0][0] if most_common else None,
+    }
+
+
+def get_rating_trend(db_path: str, platform: str = "all", days: int = 30) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(db_path)
+    query = "SELECT substr(review_date,1,10) as d, AVG(rating) as avg_rating, COUNT(*) as review_count FROM reviews WHERE review_date IS NOT NULL"
+    params: List[Any] = []
+    if platform != "all":
+        query += " AND platform = ?"
+        params.append(platform)
+    query += " GROUP BY substr(review_date,1,10) ORDER BY d DESC LIMIT ?"
+    params.append(days)
+    rows = conn.execute(query, params).fetchall()
+    return [

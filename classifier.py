@@ -36,3 +36,42 @@ TAXONOMY_CONFIG = [
         "patterns": [
             r"\bgps\b", r"\blocation\b", r"\blive tracking\b", r"\bmap\b", r"\bmaps\b",
             r"\bwrong location\b", r"\bnavigation\b", r"\btracking\b", r"\bwrong route\b",
+            r"\broute\b", r"\bnot moving\b", r"\blocation wrong\b", r"\bdriver location\b",
+        ],
+    },
+    {
+        "theme": "App crashes and performance",
+        "description": "Application force closures, app hanging, freezing, black screens, or slow responsiveness",
+        "patterns": [
+            r"\bcrash\b", r"\bcrashes\b", r"\bcrashing\b", r"\bfreeze\b", r"\bfrozen\b",
+            r"\bfreezing\b", r"\bhang\b", r"\bhanging\b", r"\bforce close\b", r"\bblack screen\b",
+            r"\bwhite screen\b", r"\bstopped working\b", r"\bnot opening\b", r"\bunresponsive\b",
+            r"\bbug\b", r"\bbugs\b", r"\bglitch\b", r"\bglitches\b", r"\blag\b", r"\blagging\b",
+        ],
+    },
+    {
+        "theme": "Login and account access",
+        "description": "Inability to sign in, account lockouts, password resets, session expiration, or registration issues",
+        "patterns": [
+            r"\blogin\b", r"\blog in\b", r"\bsign in\b", r"\bsignin\b", r"\bpassword\b",
+            r"\baccount\b", r"\bregister\b", r"\bregistration\b", r"\bcannot log\b",
+            r"\bunable to log\b", r"\blogout\b", r"\blog out\b", r"\bsession expire\b",
+            r"\blogin issue\b", r"\bauth\b", r"\bauthentication\b",
+        ],
+    },
+    {
+        "theme": "UI and usability",
+        "description": "Confusing interface, unintuitive buttons, difficult navigation, or cluttered screen layout",
+        "patterns": [
+            r"\bui\b", r"\bux\b", r"\binterface\b", r"\bconfusing\b", r"\bcomplicated\b",
+            r"\buser[- ]friendly\b", r"\bnavigation\b", r"\bbutton\b", r"\bfont\b",
+            r"\bdesign\b", r"\bbad update\b", r"\bworse update\b", r"\bhard to use\b",
+            r"\bdifficult to use\b", r"\bnot user friendly\b",
+        ],
+    },
+    {
+        "theme": "Roster and scheduling",
+        "description": "Shift rostering, ad-hoc scheduling, roster cutoff, trip cancellation, or schedule modification",
+        "patterns": [
+            r"\broster\b", r"\brostering\b", r"\bschedule\b", r"\bscheduling\b",
+            r"\bshift\b", r"\bshifts\b", r"\bad[- ]hoc\b", r"\bweekly roster\b",

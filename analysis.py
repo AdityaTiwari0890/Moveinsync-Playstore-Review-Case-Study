@@ -225,3 +225,41 @@ def calculate_version_trends(reviews: List[Dict[str, Any]]) -> List[Dict[str, An
 
 
 def calculate_segment_comparisons(reviews: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Calculate comparative metrics across segments:
+    - Employee vs Driver apps
+    - Android vs iOS
+    - MoveInSync vs Competitors
+    """
+    # 1. Employee vs Driver
+    employee_revs = [r for r in reviews if r.get("app_role") == "employee"]
+    driver_revs = [r for r in reviews if r.get("app_role") == "driver"]
+    competitor_revs = [r for r in reviews if r.get("app_role") == "competitor"]
+
+    # 2. Android vs iOS
+    android_revs = [r for r in reviews if r.get("platform") == "Android"]
+    ios_revs = [r for r in reviews if r.get("platform") == "iOS"]
+
+    def _quick_stats(rev_sublist: List[Dict[str, Any]]) -> Dict[str, Any]:
+        cnt = len(rev_sublist)
+        if cnt == 0:
+            return {"count": 0, "avg_rating": None, "negative_pct": 0.0, "positive_pct": 0.0}
+        ratings = [r.get("rating", 0) for r in rev_sublist if r.get("rating")]
+        avg = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+        neg = sum(1 for r in ratings if r in (1, 2))
+        pos = sum(1 for r in ratings if r in (4, 5))
+        return {
+            "count": cnt,
+            "avg_rating": avg,
+            "negative_pct": round(neg / cnt * 100, 1),
+            "positive_pct": round(pos / cnt * 100, 1),
+        }
+
+    return {
+        "employee_vs_driver": {
+            "employee": _quick_stats(employee_revs),
+            "driver": _quick_stats(driver_revs),
+        },
+        "platform_comparison": {
+            "android": _quick_stats(android_revs),
+            "ios": _quick_stats(ios_revs),
