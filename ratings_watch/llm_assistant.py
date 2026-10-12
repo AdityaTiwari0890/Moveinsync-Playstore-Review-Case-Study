@@ -65,3 +65,26 @@ class LLMAssistant:
         except (ValueError, TypeError):
             pass
         if self.api_key:
+            detail = detail.replace(self.api_key, "[redacted]")
+        detail = detail.replace("\r", " ").replace("\n", " ").strip()[:400]
+        if response.status_code in (401, 403):
+            return f"Ollama {operation} authentication failed (HTTP {response.status_code}). Verify the hosted API key."
+        if response.status_code == 404:
+            suffix = f" Server response: {detail}" if detail else ""
+            return f"Ollama {operation} endpoint or configured model was not found (HTTP 404). Verify the model name and service access.{suffix}"
+        suffix = f" Server response: {detail}" if detail else ""
+        return f"Ollama {operation} request failed (HTTP {response.status_code}).{suffix}"
+
+    def ask(
+        self,
+        prompt: str,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        timeout: int = 45,
+        system_prompt: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        configuration_error = self.configuration_error("chat")
+        if configuration_error:
+            return {"ok": False, "error": configuration_error}
+        messages = []
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
