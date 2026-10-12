@@ -260,3 +260,69 @@ def _overview(db_path: str, vector_path: str, filters: Dict[str, Any]) -> None:
             monthly["month"] = pd.to_datetime(monthly["review_date"], errors="coerce").dt.to_period("M").astype(str)
             volume = monthly.dropna(subset=["month"]).groupby("month").size().rename("reviews").reset_index()
             if not volume.empty:
+                st.plotly_chart(px.bar(volume, x="month", y="reviews", title="Reviews by review date"), use_container_width=True)
+            else:
+                st.info("Review publication dates are unavailable for this selection.")
+        with right:
+            st.subheader("Collected review rating distribution")
+            distribution = data.groupby("rating").size().rename("review_count").reset_index()
+            st.plotly_chart(px.bar(distribution, x="rating", y="review_count", title="Collected review sample"), use_container_width=True)
+        st.subheader("Most frequent classified themes")
+        themes = _theme_rows(data, negative_only=True).head(10)
+        if themes.empty:
+            st.info("No classified negative-review themes are available for this selection.")
+        else:
+            st.plotly_chart(px.bar(themes, x="review_count", y="theme", orientation="h"), use_container_width=True)
+        comparisons = (
+            data.groupby(["app_name", "app_role", "store_id", "platform"], dropna=False)
+            .agg(review_count=("rating", "size"), sample_average=("rating", "mean"), negative_count=("rating", lambda values: int((values <= 2).sum())))
+            .reset_index()
+        )
+        comparisons["negative_share_percent"] = comparisons["negative_count"] / comparisons["review_count"] * 100
+        st.subheader("App and platform comparison")
+        st.caption("Comparisons describe the available collected samples; they are not causal comparisons and may have different sample sizes.")
+        st.dataframe(comparisons, use_container_width=True, hide_index=True)
+    st.subheader("Ask MOVEINSYNC AI")
+    st.caption("Answers are based on indexed project evidence and deterministic SQLite metrics. AI needs a working Ollama model and a current index.")
+    _render_chat(db_path, vector_path, "overview", filters)
+
+
+def _rating_trends(db_path: str, filters: Dict[str, Any]) -> None:
+    st.title("Rating Trends")
+    st.caption("Review-date charts aggregate imported and collected records by their publication date; they are not official store-rating histories.")
+    data = _filtered_review_data(db_path, filters)
+    if data.empty:
+        st.info("No review data matches these filters.")
+        return
+    data = data.copy()
+    data["review_date"] = pd.to_datetime(data["review_date"], errors="coerce")
+    data = data.dropna(subset=["review_date"])
+    if data.empty:
+        st.info("No valid review publication dates are available.")
+        return
+    data["month"] = data["review_date"].dt.to_period("M").astype(str)
+    trend = data.groupby("month").agg(average_rating=("rating", "mean"), review_count=("rating", "size")).reset_index()
+    left, right = st.columns(2)
+    with left:
+        st.plotly_chart(px.line(trend, x="month", y="average_rating", markers=True, title="Average of collected reviews by publication month"), use_container_width=True)
+    with right:
+        st.plotly_chart(px.bar(trend, x="month", y="review_count", title="Review volume by publication month"), use_container_width=True)
+    data["negative"] = data["rating"] <= 2
+    neg = data.groupby("month").agg(negative_share=("negative", "mean")).reset_index()
+    neg["negative_share"] *= 100
+    st.plotly_chart(px.line(neg, x="month", y="negative_share", markers=True, title="Negative-review share (1–2 stars)"), use_container_width=True)
+    st.subheader("Platform and app sample comparison")
+    comparison = (
+        _filtered_review_data(db_path, {**filters, "platform": None})
+        .groupby(["app_name", "app_role", "store_id", "platform"], dropna=False)
+        .agg(review_count=("rating", "size"), sample_average=("rating", "mean"), negative_share=("rating", lambda values: (values <= 2).mean() * 100))
+        .reset_index()
+    )
+    st.dataframe(comparison, use_container_width=True, hide_index=True)
+    if "app_version" in data:
+        versions = data[data["app_version"].notna()].groupby("app_version").agg(
+            review_count=("rating", "size"),
+            sample_average=("rating", "mean"),
+            negative_share_percent=("rating", lambda values: (values <= 2).mean() * 100),
+        ).reset_index()
+        if not versions.empty:
