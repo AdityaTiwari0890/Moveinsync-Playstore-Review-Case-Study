@@ -35,3 +35,41 @@ THEME_DEFINITIONS = [
                      r"\btracking not working\b", r"\bnavigation\b"],
         "max_rating": 3,
     },
+    {
+        "name": "Cab Delays & Shift Timing",
+        "type": "Complaint",
+        "keywords": [r"\blate\b", r"\bdelay\b", r"\bdelayed\b", r"\bwaiting\b", r"\bpickup time\b",
+                     r"\bdrop time\b", r"\bcancelled\b", r"\bcanceled\b", r"\bno show\b", r"\bmissed cab\b"],
+        "max_rating": 3,
+    },
+    {
+        "name": "UI Navigation & Slow Response",
+        "type": "Complaint",
+        "keywords": [r"\bui\b", r"\bux\b", r"\bslow\b", r"\bglitch\b", r"\blag\b", r"\bconfusing\b",
+                     r"\bbad update\b", r"\bworse update\b", r"\bunresponsive\b"],
+        "max_rating": 3,
+    },
+    {
+        "name": "Battery Drain & Device Heating",
+        "type": "Complaint",
+        "keywords": [r"\bbattery\b", r"\bdrain\b", r"\bdraining\b", r"\bheating\b", r"\boverheating\b",
+                     r"\bbattery consumption\b"],
+        "max_rating": 3,
+    },
+    {
+        "name": "Driver Conduct & Safety Concerns",
+        "type": "Complaint",
+        "keywords": [r"\brude\b", r"\brash driving\b", r"\bunsafe\b", r"\bdriver behavior\b",
+                     r"\breckless\b", r"\bunprofessional\b", r"\barrogant\b", r"\bsafety\b"],
+        "max_rating": 3,
+    },
+    {
+        "name": "Customer Support & Grievances",
+        "type": "Complaint",
+        "keywords": [r"\bsupport\b", r"\bcustomer care\b", r"\bhelpline\b", r"\bno response\b",
+                     r"\bunresolved\b", r"\bhelpdesk\b", r"\bcomplaint\b"],
+        "max_rating": 3,
+    },
+    # Positive Themes
+    {
+        "name": "Punctual & Reliable Commute",

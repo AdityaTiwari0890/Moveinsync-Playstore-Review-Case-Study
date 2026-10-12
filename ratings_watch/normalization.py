@@ -86,3 +86,17 @@ def normalize_review(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         themes = themes_raw
     elif isinstance(themes_raw, str) and themes_raw.startswith("["):
         try:
+            themes = json.loads(themes_raw)
+        except Exception:
+            themes = [themes_raw] if themes_raw else []
+    else:
+        themes = [themes_raw] if themes_raw else []
+    unclassified_raw = _get("is_unclassified", "Is Unclassified")
+    is_unclassified = (
+        unclassified_raw is True
+        or unclassified_raw == 1
+        or str(unclassified_raw).strip().lower() in {"true", "1", "yes"}
+    )
+
+    return {
+        "review_id": review_id,

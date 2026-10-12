@@ -92,3 +92,50 @@ def get_play_store_metadata(package_id: str, country: str = "in", lang: str = "e
 
 
 def get_app_store_metadata(app_id: str, country: str = "in") -> Dict[str, Any]:
+    """
+    Fetch public metadata for an iOS app via Apple iTunes Lookup API.
+
+    Args:
+        app_id: The numeric Apple App Store app ID (e.g., '962949521') or bundle ID
+        country: Two-letter ISO country code (default 'in')
+
+    Returns:
+        Dict containing public metadata fields and documented limitations.
+    """
+    clean_id = str(app_id).strip()
+    if clean_id.lower().startswith("id"):
+        clean_id = clean_id[2:]
+
+    # Lookup by numeric ID or bundleId
+    query_param = "id" if clean_id.isdigit() else "bundleId"
+    url = f"https://itunes.apple.com/lookup?{query_param}={clean_id}&country={country}"
+
+    try:
+        resp = requests.get(url, headers={"User-Agent": "AppReviewIntelligence/1.0"}, timeout=10)
+        resp.raise_for_status()
+        payload = resp.json()
+        results = payload.get("results", [])
+
+        if not results:
+            # Fallback retry without country if regional lookup returned empty
+            url_fallback = f"https://itunes.apple.com/lookup?{query_param}={clean_id}"
+            resp_fb = requests.get(url_fallback, headers={"User-Agent": "AppReviewIntelligence/1.0"}, timeout=10)
+            if resp_fb.status_code == 200:
+                results = resp_fb.json().get("results", [])
+
+        if not results:
+            return {
+                "platform": "iOS",
+                "store_id": clean_id,
+                "title": "",
+                "developer": "",
+                "store_url": f"https://apps.apple.com/app/id{clean_id}",
+                "current_version": None,
+                "last_updated": None,
+                "store_rating": None,
+                "store_ratings_count": None,
+                "category": "",
+                "installs": "N/A (iOS)",
+                "description": "",
+                "limitation_note": f"App ID '{clean_id}' not found on Apple App Store.",
+                "status": "NOT_FOUND",

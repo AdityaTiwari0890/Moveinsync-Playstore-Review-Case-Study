@@ -254,3 +254,89 @@ def main():
         while True:
             target = collect_app_target_interactive()
             if target:
+                apps_queue.append(target)
+                print(f"[+] Added '{target['app_name']}' ({target['app_role']}) to queue.")
+
+            add_more = input("\nWould you like to add another app (e.g. driver-side or competitor)? [y/N]: ").strip().lower()
+            if add_more not in ("y", "yes"):
+                break
+
+    if not apps_queue:
+        print("[!] No apps queued for scraping. Exiting.")
+        sys.exit(0)
+
+    print("\n" + "=" * 70)
+    print(f"CONFIRMED APPS TO SCRAPE ({len(apps_queue)} total):")
+    for idx, a in enumerate(apps_queue, 1):
+        print(f"  [{idx}] {a['app_name']} ({a['app_role']}) | Android: {a.get('android_id') or 'None'} | iOS: {a.get('ios_id') or 'None'} | Target: {a['count']} reviews")
+    print("=" * 70)
+
+    if not args.non_interactive:
+        confirm = input("\nProceed with data collection? [Y/n]: ").strip().lower()
+        if confirm in ("n", "no"):
+            print("Operation aborted by user.")
+            sys.exit(0)
+
+    # Output Filename
+    timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    if args.output:
+        output_file = args.output
+        if not output_file.endswith(".xlsx"):
+            output_file += ".xlsx"
+    else:
+        first_name = apps_queue[0]["app_name"].replace(" ", "_")
+        output_file = f"App_Review_Intelligence_{first_name}_{timestamp_str}.xlsx"
+
+    all_android_reviews: List[Dict[str, Any]] = []
+    all_ios_reviews: List[Dict[str, Any]] = []
+    all_metadata: List[Dict[str, Any]] = []
+    collection_logs: List[Dict[str, Any]] = []
+    summary_metrics_list: List[Dict[str, Any]] = []
+
+    def log_collector(level: str, msg: str, app_name: str, platform: str, store_id: str, req_cnt: int = 0, ret_cnt: int = 0, source: str = "Store API"):
+        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{ts}] [{level}] [{app_name} - {platform}] {msg}")
+        collection_logs.append({
+            "timestamp": ts,
+            "app_name": app_name,
+            "platform": platform,
+            "store_id": store_id,
+            "status": level,
+            "requested_count": req_cnt,
+            "retrieved_count": ret_cnt,
+            "data_source": source,
+            "message": msg,
+            "limitation_note": "" if level in ("INFO", "SUCCESS") else msg,
+        })
+
+    # Execute Collection Loop
+    for target in apps_queue:
+        name = target["app_name"]
+        role = target["app_role"]
+        req_count = target["count"]
+
+        # 1. Android Collection
+        if target.get("android_id"):
+            pkg = target["android_id"]
+            print(f"\n>>> Collecting Android Metadata & Reviews for '{name}' ({pkg})...")
+            # Metadata
+            meta_and = get_play_store_metadata(pkg, country=args.country)
+            all_metadata.append(meta_and)
+            log_collector(meta_and["status"], f"Fetched Android store metadata (Rating: {meta_and.get('store_rating')} stars)", name, "Android", pkg, 0, 0, "Google Play API")
+
+            # Reviews
+            def and_cb(lvl, m):
+                log_collector(lvl, m, name, "Android", pkg, req_count, len(all_android_reviews), "google-play-scraper")
+
+            and_revs = scrape_play_store_reviews(
+                package_id=pkg,
+                app_name=name,
+                app_role=role,
+                count=req_count,
+                start_date=start_date,
+                end_date=end_date,
+                country=args.country,
+                log_callback=and_cb,
+            )
+            all_android_reviews.extend(and_revs)
+
