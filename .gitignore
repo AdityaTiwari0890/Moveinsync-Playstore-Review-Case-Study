@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+ratings_watch_vectors/
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+*.xlsx
+*.csv
+~$*
+MOVEIN_SYNC_ANALYSIS_REPORT.md
+MOVEIN_SYNC_STEP3_RECOMMENDATIONS.md
+.streamlit/secrets.toml
