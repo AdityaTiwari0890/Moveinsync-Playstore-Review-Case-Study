@@ -170,3 +170,61 @@ class TestAnalysisEngine(unittest.TestCase):
         del norm_df
         import gc; gc.collect()
         try:
+            if os.path.exists(mock_file):
+                os.remove(mock_file)
+        except Exception:
+            pass
+
+    def test_06_version_regression_and_sample_safeguard(self):
+        """Verify version analysis detects regressions when N >= 15 and flags low samples."""
+        rows = []
+        # Version 1.0: 20 reviews, avg rating 4.5
+        for i in range(20):
+            rows.append({"app_name": "MoveInSync", "platform": "Android", "app_version_clean": "1.0", "rating": 5, "review_date": "2026-08-01", "review_text": "Good", "assigned_themes": []})
+        # Version 2.0: 20 reviews, avg rating 2.0 (Drop of 2.5★ -> should flag regression)
+        for i in range(20):
+            rows.append({"app_name": "MoveInSync", "platform": "Android", "app_version_clean": "2.0", "rating": 1, "review_date": "2026-09-01", "review_text": "Crash", "assigned_themes": ["App crashes and performance"], "review_id": f"rev_2_{i}"})
+        # Version 3.0: 5 reviews (Low sample N < 15 -> should NOT trigger regression comparison)
+        for i in range(5):
+            rows.append({"app_name": "MoveInSync", "platform": "Android", "app_version_clean": "3.0", "rating": 1, "review_date": "2026-10-01", "review_text": "Late", "assigned_themes": ["Cab delays and no-shows"], "review_id": f"rev_3_{i}"})
+
+        df_v = pd.DataFrame(rows)
+        v_df, reg_df = compute_version_analysis(df_v, min_sample=15, rating_drop_threshold=0.30)
+
+        # Check version 3.0 was flagged as Low Sample
+        v3_row = v_df[v_df["App Version"] == "3.0"].iloc[0]
+        self.assertIn("Low Sample", v3_row["Sample Size Flag"])
+
+        # Check regression was flagged between 1.0 and 2.0
+        self.assertGreaterEqual(len(reg_df), 1)
+        flagged = reg_df.iloc[0]
+        self.assertEqual(flagged["Prior Version"], "1.0")
+        self.assertEqual(flagged["Current Version"], "2.0")
+        self.assertLessEqual(flagged["Rating Delta"], -0.30)
+        self.assertIn("Observational association", flagged["Analytical Warning"])
+
+    def test_07_action_priority_matrix(self):
+        """Verify Action_Priorities table formulation and priority sorting."""
+        pareto_df = pd.DataFrame([
+            {"Theme": "Cab delays and no-shows", "Negative Reviews Count": 100, "Share of Negative Reviews % (N=150)": 66.7},
+            {"Theme": "GPS and location tracking", "Negative Reviews Count": 80, "Share of Negative Reviews % (N=150)": 53.3},
+        ])
+        action_df = compute_action_priorities(pareto_df, pd.DataFrame(), total_negative_reviews=150)
+
+        self.assertIn("Priority", action_df.columns)
+        self.assertIn("Severity / Impact", action_df.columns)
+        self.assertIn("Recommended Investigation / Fix", action_df.columns)
+        self.assertIn("Suggested Success Metric", action_df.columns)
+
+        # Verify P1 issues appear first
+        self.assertTrue(action_df.iloc[0]["Priority"].startswith("P1"))
+
+    def test_08_end_to_end_workbook_enhancement(self):
+        """Verify enhance_workbook_with_analysis preserves raw sheets and adds 5 new analysis sheets."""
+        input_test_file = "test_raw_workbook.xlsx"
+        output_test_file = "test_analyzed_workbook.xlsx"
+
+        # Create a mock raw workbook
+        wb_mock = openpyxl.Workbook()
+        ws_comb = wb_mock.active
+        ws_comb.title = "Combined_Reviews"

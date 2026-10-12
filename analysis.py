@@ -301,3 +301,41 @@ def extract_issue_themes(reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
             if matched:
                 theme_matches[theme["name"]].append(r)
+
+    results = []
+    for theme in THEME_DEFINITIONS:
+        name = theme["name"]
+        matched_revs = theme_matches.get(name, [])
+        count = len(matched_revs)
+        pct = round(count / total_reviews * 100, 1)
+
+        ratings = [r.get("rating", 0) for r in matched_revs if r.get("rating")]
+        avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else None
+
+        # Sample up to 5 representative review IDs
+        rep_ids = ", ".join([str(r.get("review_id", "")) for r in matched_revs[:5]])
+
+        # Sample up to 3 excerpts (cleaned and truncated to 120 chars)
+        excerpts = []
+        for r in matched_revs[:3]:
+            txt = (r.get("review_text") or "").replace("\n", " ").strip()
+            if len(txt) > 120:
+                txt = txt[:117] + "..."
+            if txt:
+                excerpts.append(f'"{txt}"')
+        excerpt_str = " | ".join(excerpts) if excerpts else "None"
+
+        results.append({
+            "theme": name,
+            "type": theme["type"],
+            "review_count": count,
+            "percentage_of_total": pct,
+            "average_rating": avg_rating,
+            "representative_review_ids": rep_ids,
+            "example_excerpts": excerpt_str,
+            "classification_method": "Automated regex rule-based match (manually auditable)",
+        })
+
+    # Sort themes by review count descending
+    results.sort(key=lambda x: x["review_count"], reverse=True)
+    return results

@@ -210,3 +210,109 @@ def export_intelligence_workbook(
     # -------------------------------------------------------------
     ws_themes = wb.create_sheet(title="Issue_Themes")
     theme_cols = [
+        "Theme Name", "Type / Sentiment", "Review Count", "% of Total Reviews",
+        "Average Rating", "Representative Review IDs", "Example Review Excerpts",
+        "Classification Methodology"
+    ]
+    ws_themes.append(theme_cols)
+    for it in issue_themes:
+        ws_themes.append([
+            it.get("theme"), it.get("type"), it.get("review_count"),
+            f"{it.get('percentage_of_total')}%", it.get("average_rating"),
+            it.get("representative_review_ids"), it.get("example_excerpts"),
+            it.get("classification_method")
+        ])
+
+    # -------------------------------------------------------------
+    # 6. Sheet 6: Collection_Log
+    # -------------------------------------------------------------
+    ws_logs = wb.create_sheet(title="Collection_Log")
+    log_cols = [
+        "Timestamp", "App Name", "Platform", "Store ID", "Status",
+        "Requested Count", "Retrieved Count", "Data Source Used",
+        "Message / Audit Details", "Known API Limitations"
+    ]
+    ws_logs.append(log_cols)
+    for lg in collection_logs:
+        ws_logs.append([
+            lg.get("timestamp"), lg.get("app_name"), lg.get("platform"),
+            lg.get("store_id"), lg.get("status"), lg.get("requested_count"),
+            lg.get("retrieved_count"), lg.get("data_source"),
+            lg.get("message"), lg.get("limitation_note")
+        ])
+
+    # -------------------------------------------------------------
+    # Post-Processing: Table Formatting, Freezing, Column Auto-Fit
+    # -------------------------------------------------------------
+    sheets_to_format_as_table = [
+        (ws_android, "Table_Android_Reviews", len(android_reviews)),
+        (ws_ios, "Table_iOS_Reviews", len(ios_reviews)),
+        (ws_combined, "Table_Combined_Reviews", len(combined_reviews)),
+        (ws_themes, "Table_Issue_Themes", len(issue_themes)),
+        (ws_logs, "Table_Collection_Log", len(collection_logs)),
+    ]
+
+    for ws, table_name, data_count in sheets_to_format_as_table:
+        max_col = ws.max_column
+        max_row = max(ws.max_row, 2)  # Excel tables require at least 1 data row
+
+        # Style header row
+        for col_idx in range(1, max_col + 1):
+            cell = ws.cell(row=1, column=col_idx)
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+
+        # Freeze header row
+        ws.freeze_panes = "A2"
+
+        # Auto-filter and Excel table creation
+        tab_range = f"A1:{get_column_letter(max_col)}{max_row}"
+        tab = Table(displayName=table_name, ref=tab_range)
+        tab_style = TableStyleInfo(
+            name="TableStyleLight9",
+            showFirstColumn=False,
+            showLastColumn=False,
+            showRowStripes=True,
+            showColumnStripes=False
+        )
+        tab.tableStyleInfo = tab_style
+        ws.add_table(tab)
+
+    # Style App_Summary sheet headers
+    for row in ws_summary.iter_rows():
+        for cell in row:
+            cell.font = regular_font
+            cell.border = thin_border
+            # Section titles styling
+            if cell.value and isinstance(cell.value, str) and cell.value.startswith("SECTION "):
+                cell.font = Font(name="Calibri", size=11, bold=True, color=WHITE_TEXT)
+                cell.fill = section_fill
+            # Sub-table headers
+            elif cell.row in (2, 8, 17, 26):
+                cell.font = header_font
+                cell.fill = header_fill
+
+    ws_summary.freeze_panes = "A3"
+
+    # Auto-adjust column widths with max clamping across all sheets
+    for ws in wb.worksheets:
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                cell.font = regular_font
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+                if cell.value:
+                    val_str = str(cell.value)
+                    # Check first line length for wrapped strings
+                    first_line = val_str.split("\n")[0]
+                    max_len = max(max_len, min(len(first_line), 80))
+
+            # Apply clamped width (min 12, max 65)
+            ws.column_dimensions[col_letter].width = max(12, min(max_len + 3, 65))
+
+    wb.save(output_filepath)
+    return output_filepath

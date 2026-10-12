@@ -269,3 +269,42 @@ def evaluate_classifier(
 
     per_theme_results: Dict[str, Dict[str, Any]] = {}
     precisions = []
+    recalls = []
+    f1s = []
+
+    for name in taxonomy_names:
+        tp = stats[name]["tp"]
+        fp = stats[name]["fp"]
+        fn = stats[name]["fn"]
+
+        prec = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+        rec = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+        f1 = (2 * prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
+
+        per_theme_results[name] = {
+            "true_positives": tp,
+            "false_positives": fp,
+            "false_negatives": fn,
+            "precision": round(prec, 4),
+            "recall": round(rec, 4),
+            "f1_score": round(f1, 4),
+            "support": tp + fn,
+        }
+
+        # Include in macro average only if class appeared in ground truth or predictions
+        if (tp + fn + fp) > 0:
+            precisions.append(prec)
+            recalls.append(rec)
+            f1s.append(f1)
+
+    macro_prec = round(sum(precisions) / len(precisions), 4) if precisions else 0.0
+    macro_rec = round(sum(recalls) / len(recalls), 4) if recalls else 0.0
+    macro_f1 = round(sum(f1s) / len(f1s), 4) if f1s else 0.0
+
+    return {
+        "sample_size": n_samples,
+        "per_theme": per_theme_results,
+        "macro_precision": macro_prec,
+        "macro_recall": macro_rec,
+        "macro_f1_score": macro_f1,
+    }

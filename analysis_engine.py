@@ -1023,3 +1023,117 @@ def run_analysis_pipeline(input_file: str, output_file: Optional[str] = None) ->
     1. Load and normalize input workbook
     2. Compute statistical rating analysis
     3. Perform multi-label complaint classification and Pareto 80/20 analysis
+    4. Compute version analysis and detect potential regressions
+    5. Build Action-Priority Matrix
+    6. Export enhanced workbook with 5 analysis sheets and charts
+    7. Generate executive Markdown report
+    """
+    if not output_file:
+        base, ext = os.path.splitext(input_file)
+        output_file = f"{base}_Analyzed{ext}"
+
+    print("=" * 70)
+    print("       MOVEIN SYNC APP REVIEW ANALYSIS ENGINE (STEP 2)       ")
+    print("=" * 70)
+    print(f"[*] Ingesting Workbook: '{input_file}'...")
+
+    df, audit_meta = load_and_normalize_workbook(input_file)
+    total_reviews = len(df)
+    total_negative = (df["rating"].isin([1, 2])).sum()
+
+    print(f"[+] Loaded {audit_meta['initial_rows']:,} rows ({audit_meta['valid_rows']:,} valid, {audit_meta['duplicates_dropped']} duplicates removed).")
+    print(f"[+] Total Active Reviews: {total_reviews:,} | Negative (1★+2★): {total_negative:,} ({(total_negative/total_reviews*100):.1f}%)")
+
+    # 1. Rating Analysis
+    print("\n[*] Calculating Statistical Rating Distributions & Monthly Trajectory...")
+    rating_data = compute_rating_analysis(df, min_sample=15)
+
+    # 2. Classification & Pareto Analysis
+    print("[*] Running 11-Category Multi-Label Complaint Classification...")
+    classifier = ReviewClassifier()
+    df_classified, theme_analysis_df, pareto_df = compute_theme_and_pareto_analysis(df, classifier)
+
+    # 3. Version Analysis
+    print("[*] Performing Version Trajectory & Regression Analysis...")
+    version_df, regression_df = compute_version_analysis(df_classified, min_sample=15)
+
+    # 4. Action Priorities
+    print("[*] Formulating Action-Priority Matrix...")
+    action_df = compute_action_priorities(pareto_df, theme_analysis_df, total_negative)
+
+    # 5. Enhance Workbook
+    print(f"[*] Appending 5 Analysis Sheets & Charts to: '{output_file}'...")
+    enhanced_path = enhance_workbook_with_analysis(
+        input_filepath=input_file,
+        output_filepath=output_file,
+        rating_data=rating_data,
+        theme_analysis_df=theme_analysis_df,
+        pareto_df=pareto_df,
+        version_df=version_df,
+        regression_df=regression_df,
+        action_df=action_df,
+        total_reviews=total_reviews,
+        total_negative_reviews=total_negative,
+    )
+    print(f"[+] Successfully saved enhanced workbook: '{enhanced_path}'")
+
+    # 6. Generate Markdown Report
+    report_path = "MOVEIN_SYNC_ANALYSIS_REPORT.md"
+    print(f"[*] Generating Executive Report: '{report_path}'...")
+    generate_markdown_report(
+        overview_df=rating_data["overview_table"],
+        theme_analysis_df=theme_analysis_df,
+        pareto_df=pareto_df,
+        version_df=version_df,
+        regression_df=regression_df,
+        action_df=action_df,
+        audit_meta=audit_meta,
+        total_reviews=total_reviews,
+        total_negative_reviews=total_negative,
+        output_path=report_path,
+    )
+    print(f"[+] Executive report compiled: '{report_path}'")
+
+    print("\n" + "=" * 70)
+    print("ANALYSIS ENGINE PIPELINE COMPLETE!")
+    print(f"Workbook Output: {os.path.abspath(enhanced_path)}")
+    print(f"Report Output:   {os.path.abspath(report_path)}")
+    print("=" * 70)
+
+    return {
+        "enhanced_workbook": enhanced_path,
+        "markdown_report": report_path,
+        "total_reviews": total_reviews,
+        "total_negative": total_negative,
+        "audit_meta": audit_meta,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="MOVEIN SYNC App Review Analysis Engine - Statistical, Thematic, and Pareto Intelligence"
+    )
+    parser.add_argument(
+        "--input", "-i", type=str, required=True, help="Path to existing scraper Excel workbook (.xlsx)"
+    )
+    parser.add_argument(
+        "--output", "-o", type=str, default=None, help="Path for enhanced output Excel workbook (.xlsx)"
+    )
+    parser.add_argument(
+        "--report", "-r", type=str, default="MOVEIN_SYNC_ANALYSIS_REPORT.md", help="Path for Markdown report"
+    )
+    parser.add_argument(
+        "--min-sample", type=int, default=15, help="Minimum sample threshold for statistical reliability (default: 15)"
+    )
+
+    args = parser.parse_args()
+
+    try:
+        run_analysis_pipeline(input_file=args.input, output_file=args.output)
+    except Exception as exc:
+        print(f"\n[!] Execution Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

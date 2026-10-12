@@ -126,3 +126,19 @@ def get_theme_evidence(db_path: str, theme_name: str, limit: int = 5) -> List[Di
         {"review_id": row[0], "platform": row[1], "rating": row[2], "review_text": row[3], "review_date": row[4]}
         for row in rows
     ]
+
+
+def compare_platforms(db_path: str) -> Dict[str, Any]:
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT platform, AVG(rating), COUNT(*), SUM(CASE WHEN rating <= 2 THEN 1 ELSE 0 END) FROM reviews GROUP BY platform"
+    ).fetchall()
+    result = {}
+    for platform, avg_rating, total, negative in rows:
+        result[platform] = {
+            "avg_rating": round(_safe_float(avg_rating, 0), 2),
+            "total_reviews": total,
+            "negative_count": negative,
+            "negative_share": round((negative / total) * 100, 2) if total else 0.0,
+        }
+    return result
