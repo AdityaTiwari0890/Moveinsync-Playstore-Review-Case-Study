@@ -58,3 +58,23 @@ class QueryTools:
         summary = self.get_rating_summary(platform)
         return summary["negative_share_pct"]
 
+    def get_top_themes(self, platform: str = "all", limit: int = 5) -> List[Dict[str, Any]]:
+        conn = self._conn()
+        query = "SELECT assigned_themes FROM reviews WHERE assigned_themes IS NOT NULL"
+        params = []
+        if platform != "all":
+            query += " AND platform = ?"
+            params.append(platform)
+        rows = conn.execute(query, params).fetchall()
+        counts = {}
+        for row in rows:
+            try:
+                themes = json.loads(row[0])
+            except Exception:
+                themes = []
+            if isinstance(themes, list):
+                for theme in themes:
+                    counts[theme] = counts.get(theme, 0) + 1
+        return [{"theme": theme, "count": count} for theme, count in sorted(counts.items(), key=lambda x: (-x[1], x[0]))[:limit]]
+
+    def compare_platforms(self) -> Dict[str, Any]:

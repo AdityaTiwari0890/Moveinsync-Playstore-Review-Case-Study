@@ -133,3 +133,26 @@ class LLMAssistant:
                 raise RuntimeError(self._response_error(response, "embedding"))
             payload = response.json()
             if not isinstance(payload, dict):
+                raise RuntimeError("Ollama returned an invalid embedding response object.")
+            embeddings = payload.get("embeddings")
+            if (
+                not isinstance(embeddings, list)
+                or len(embeddings) != len(texts)
+                or any(not isinstance(vector, list) or not vector for vector in embeddings)
+            ):
+                raise RuntimeError("Ollama returned an invalid embedding response.")
+            return [[float(value) for value in vector] for vector in embeddings]
+        except requests.Timeout as exc:
+            raise RuntimeError("Ollama embedding request timed out.") from exc
+        except requests.RequestException as exc:
+            raise RuntimeError("Could not connect to the Ollama embedding endpoint.") from exc
+        except (ValueError, TypeError, KeyError) as exc:
+            raise RuntimeError("Ollama returned an invalid embedding response.") from exc
+
+    def test_connection(self) -> Dict[str, Any]:
+        """Test chat inference and embedding generation independently."""
+        chat_configuration_error = self.configuration_error("chat")
+        embedding_configuration_error = self.configuration_error("embedding")
+        chat = (
+            {"ok": False, "error": chat_configuration_error}
+            if chat_configuration_error

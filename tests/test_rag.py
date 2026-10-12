@@ -145,3 +145,52 @@ class RagTests(unittest.TestCase):
                 api_key="private-test-key",
                 base_url="https://ollama.com/api",
                 model="gemma4:31b",
+            )
+            result = assistant.ask("test")
+        self.assertFalse(result["ok"])
+        self.assertNotIn("private-test-key", json.dumps(result))
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer private-test-key")
+        self.assertEqual(post.call_args.args[0], "https://ollama.com/api/chat")
+
+    def test_placeholder_key_is_rejected_without_network_requests(self):
+        assistant = LLMAssistant(
+            api_key="your_ollama_api_key",
+            base_url="https://ollama.com/api",
+            model="gemma4:31b",
+            embedding_model="embeddinggemma",
+        )
+        self.assertEqual(assistant.base_url, "https://ollama.com/api")
+        self.assertFalse(assistant.available())
+        with patch("ratings_watch.llm_assistant.requests.post") as post:
+            result = assistant.test_connection()
+        self.assertFalse(result["chat"]["ok"])
+        self.assertFalse(result["embedding"]["ok"])
+        self.assertIn("placeholder", result["chat"]["error"])
+        post.assert_not_called()
+
+    def test_ollama_chat_and_embed_use_documented_paths_and_response_shapes(self):
+        class Response:
+            status_code = 200
+
+            def __init__(self, payload):
+                self.payload = payload
+
+            def json(self):
+                return self.payload
+
+        assistant = LLMAssistant(
+            api_key="private-test-key",
+            base_url="https://ollama.com/api/api/",
+            model="gemma4:31b",
+            embedding_model="embeddinggemma",
+        )
+        with patch(
+            "ratings_watch.llm_assistant.requests.post",
+            side_effect=[
+                Response({"message": {"role": "assistant", "content": "OK"}}),
+                Response({"embeddings": [[0.1, 0.2]]}),
+            ],
+        ) as post:
+            chat = assistant.ask("Reply OK")
+            vectors = assistant.embed(["query"])
+        self.assertEqual(chat, {"ok": True, "answer": "OK"})
