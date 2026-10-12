@@ -86,3 +86,26 @@ def scrape_play_store_reviews(
         lang: Two-letter language code (default 'en')
         log_callback: Optional callback func(level, message)
 
+    Returns:
+        List of standardized review dictionaries sorted newest first.
+    """
+    collected_reviews: List[Dict[str, Any]] = []
+    seen_ids = set()
+    continuation_token = None
+    batch_size = min(200, count)
+    collection_ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    source_url = f"https://play.google.com/store/apps/details?id={package_id}"
+
+    def log(level: str, msg: str):
+        if log_callback:
+            log_callback(level, msg)
+
+    log("INFO", f"Starting Google Play scrape for '{app_name}' ({package_id}), target: {count} reviews.")
+
+    reached_date_boundary = False
+    retry_count = 0
+    max_retries = 3
+
+    while len(collected_reviews) < count and not reached_date_boundary:
+        current_request_count = min(batch_size, count - len(collected_reviews))
+        try:

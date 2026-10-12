@@ -21,3 +21,27 @@ from analysis import (
 from excel_exporter import export_intelligence_workbook
 
 
+class TestAppReviewIntelligenceScraper(unittest.TestCase):
+
+    def test_01_play_store_search(self):
+        """Verify Play Store candidate search finds MoveInSync."""
+        candidates = search_play_store("MoveInSync", limit=5)
+        self.assertGreater(len(candidates), 0, "Play Store search should return candidates")
+        app_ids = [c["app_id"] for c in candidates]
+        self.assertTrue(
+            any("moveinsync" in str(aid).lower() for aid in app_ids),
+            f"Expected MoveInSync in search candidates, got: {app_ids}"
+        )
+
+    def test_02_play_store_reviews_collection(self):
+        """Verify Play Store review scraping retrieves >= 100 reviews, sorted newest first, deduplicated."""
+        reviews = scrape_play_store_reviews(
+            package_id="com.moveinsync.ets",
+            app_name="MoveInSync",
+            app_role="employee",
+            count=100,
+        )
+        self.assertGreaterEqual(len(reviews), 100, f"Expected at least 100 reviews, got {len(reviews)}")
+
+        # Check sorting: newest to oldest
+        dates = [r["review_date"] for r in reviews if r.get("review_date")]
