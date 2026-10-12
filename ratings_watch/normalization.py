@@ -71,3 +71,18 @@ def normalize_review(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                 return raw[k]
         return None
 
+    platform = _clean_str(_get("platform", "Platform"))
+    if not platform:
+        return None
+    rating = _safe_rating(_get("rating", "Rating", "score", "Score"))
+    if rating is None:
+        return None
+
+    review_id = _source_review_id(raw)
+    if not review_id or review_id.startswith("fallback_"):
+        return None
+    themes_raw = _get("assigned_themes", "Assigned Themes")
+    if isinstance(themes_raw, list):
+        themes = themes_raw
+    elif isinstance(themes_raw, str) and themes_raw.startswith("["):
+        try:
