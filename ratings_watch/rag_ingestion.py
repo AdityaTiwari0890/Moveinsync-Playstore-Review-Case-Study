@@ -109,3 +109,59 @@ def discover_documents(
     if workbook.exists():
         with pd.ExcelFile(workbook) as excel:
             for sheet in excel.sheet_names:
+                frame = pd.read_excel(excel, sheet_name=sheet)
+                if sheet in {"Combined_Reviews", "Android_Reviews", "iOS_Reviews"}:
+                    for index, row in frame.iterrows():
+                        raw = row.to_dict()
+                        review = normalize_review(raw)
+                        if not review:
+                            continue
+                        source_text = raw.get("Review Text")
+                        if source_text is None or pd.isna(source_text):
+                            source_text = raw.get("review_text", raw.get("content"))
+                        if source_text is None or pd.isna(source_text):
+                            source_text = review.get("review_text") or ""
+                        else:
+                            source_text = str(source_text)
+                        review["review_text"] = source_text
+                        if not review.get("assigned_themes") and review.get("review_text"):
+                            classification = classifier.classify(review["review_text"], review.get("rating"))
+                            review["assigned_themes"] = classification["themes"]
+                            review["heuristic_confidence"] = classification["heuristic_confidence"]
+                            review["classification_method"] = classification["classification_method"]
+                            review["is_unclassified"] = classification["is_unclassified"]
+                        review_id = f"review:{review['platform']}:{review['review_id']}"
+                        themes = review.get("assigned_themes") or []
+                        text = review.get("review_text") or ""
+                        content = (
+                            f"Review ID: {review['review_id']}\nPlatform: {review['platform']}\n"
+                            f"App: {review.get('app_name') or 'Unavailable'}\n"
+                            f"Role: {review.get('app_role') or 'Unavailable'}\nRating: {review['rating']}\n"
+                            f"Date: {review.get('review_date') or 'Unavailable'}\n"
+                            f"Version: {review.get('app_version') or 'Unavailable'}\n"
+                            f"Themes: {', '.join(map(str, themes)) or 'Unclassified / no theme assigned'}\n"
+                            f"Review: {text}"
+                        )
+                        _add_chunked_document(
+                            documents,
+                            review_id,
+                            content,
+                            {
+                                "source_type": "review",
+                                "source_name": workbook.name,
+                                "source_path": str(workbook),
+                                "sheet": sheet,
+                                "row": int(index) + 2,
+                                "review_id": review["review_id"],
+                                "platform": review["platform"],
+                                "app_name": review.get("app_name"),
+                                "app_role": review.get("app_role"),
+                                "rating": review["rating"],
+                                "review_date": review.get("review_date"),
+                                "app_version": review.get("app_version"),
+                                "themes": themes,
+                                "confidence": review.get("heuristic_confidence"),
+                                "classification_method": review.get("classification_method"),
+                                "is_unclassified": review.get("is_unclassified", False),
+                                "original_review_text": text,
+                            },
