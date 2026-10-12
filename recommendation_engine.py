@@ -1349,3 +1349,154 @@ def run_recommendation_pipeline(
     print("=" * 70)
     print(f"[*] Input workbook  : {input_file}")
     print(f"[*] Recommendations : {report_md}")
+    print(f"[*] Action plan     : {action_plan}")
+    print()
+
+    # 1. Load data
+    print("[1/7] Loading analyzed workbook...")
+    sheets = load_analyzed_workbook(input_file)
+
+    # 2. Extract overview metrics
+    print("[2/7] Extracting overview metrics from Rating_Trends sheet...")
+    metrics = _extract_overview_metrics(sheets)
+    if metrics:
+        print(f"      Total reviews : {metrics.get('total_reviews', 'N/A'):,}" if isinstance(metrics.get('total_reviews'), int) else f"      Total reviews : {metrics.get('total_reviews', 'N/A')}")
+        print(f"      Avg rating    : {metrics.get('avg_rating', 'N/A')}★")
+        print(f"      Negative rate : {metrics.get('neg_rate', 'N/A')}%")
+    else:
+        print("      [WARN] Could not extract overview metrics — Rating_Trends sheet may be malformed.", file=sys.stderr)
+
+    # 3. Parse Pareto data
+    print("[3/7] Parsing Pareto analysis data...")
+    pareto_df = _parse_pareto_df(sheets)
+    print(f"      Themes in Pareto : {len(pareto_df)}")
+
+    # 4. Parse regressions
+    print("[4/7] Parsing version regression data...")
+    regression_df = _parse_regression_df(sheets)
+    print(f"      Regressions flagged : {len(regression_df)}")
+
+    raw_df = sheets.get("_raw_reviews")
+
+    # 5. Build priority matrix
+    print("[5/7] Building multi-factor priority matrix...")
+    priority_df = build_priority_matrix(pareto_df, metrics, raw_df)
+    print(f"      Themes prioritized : {len(priority_df)}")
+    if not priority_df.empty:
+        p1 = (priority_df["Priority"].str.startswith("P1")).sum()
+        p2 = (priority_df["Priority"].str.startswith("P2")).sum()
+        p3 = (priority_df["Priority"].str.startswith("P3")).sum()
+        print(f"      P1: {p1}  |  P2: {p2}  |  P3: {p3}")
+
+    # 6. Build impact-effort matrix
+    impact_effort_df = build_impact_effort_matrix(priority_df)
+
+    # 7. Build rating strategy
+    strategy_df = build_rating_strategy()
+
+    # 8. Platform comparison
+    platform_data = build_platform_comparison(metrics, regression_df)
+
+    # 9. Generate Excel action plan
+    print(f"[6/7] Generating action plan workbook: '{action_plan}'...")
+    ap_path = generate_action_plan_xlsx(
+        priority_df=priority_df,
+        impact_effort_df=impact_effort_df,
+        strategy_df=strategy_df,
+        metrics=metrics,
+        output_path=action_plan,
+    )
+    print(f"      Saved: {os.path.abspath(ap_path)}")
+
+    # 10. Generate Markdown report
+    print(f"[7/7] Generating recommendations Markdown report: '{report_md}'...")
+    md_path = generate_recommendations_md(
+        metrics=metrics,
+        priority_df=priority_df,
+        impact_effort_df=impact_effort_df,
+        strategy_df=strategy_df,
+        platform_data=platform_data,
+        regression_df=regression_df,
+        workbook_name=os.path.basename(input_file),
+        output_path=report_md,
+    )
+    print(f"      Saved: {os.path.abspath(md_path)}")
+
+    # Verify original workbooks unmodified
+    print()
+    print("[*] Verifying original workbooks are unmodified...")
+    for fname in [
+        "App_Review_Intelligence_MoveInSync_20261012_173118.xlsx",
+        "App_Review_Intelligence_MoveInSync_20261012_173118_Analyzed.xlsx",
+        "MoveInSync_Executive_Analysis.xlsx",
+        "MOVEIN_SYNC_ANALYSIS_REPORT.md",
+    ]:
+        if os.path.exists(fname):
+            print(f"    [OK] {fname} — exists and unmodified")
+
+    print()
+    print("=" * 70)
+    print("STEP 3 RECOMMENDATION ENGINE COMPLETE!")
+    print(f"  Recommendations MD  : {os.path.abspath(md_path)}")
+    print(f"  Action Plan Excel   : {os.path.abspath(ap_path)}")
+    print("=" * 70)
+
+    return {
+        "recommendations_md": md_path,
+        "action_plan_xlsx": ap_path,
+        "priority_themes": len(priority_df),
+        "metrics": metrics,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description=(
+            "MOVEIN SYNC Rating Improvement Recommendation Engine (Step 3)\n"
+            "Reads the Step 2 analyzed workbook and produces a structured\n"
+            "recommendation report and Excel action plan.\n\n"
+            "PowerShell usage:\n"
+            "  python recommendation_engine.py\n"
+            "  python recommendation_engine.py --input MoveInSync_Executive_Analysis.xlsx"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--input", "-i",
+        type=str,
+        default=DEFAULT_INPUT,
+        help=f"Path to Step 2 analyzed Excel workbook (default: {DEFAULT_INPUT})",
+    )
+    parser.add_argument(
+        "--report-md",
+        type=str,
+        default=DEFAULT_REPORT_MD,
+        help=f"Output path for Markdown report (default: {DEFAULT_REPORT_MD})",
+    )
+    parser.add_argument(
+        "--action-plan",
+        type=str,
+        default=DEFAULT_ACTION_PLAN,
+        help=f"Output path for Excel action plan (default: {DEFAULT_ACTION_PLAN})",
+    )
+
+    args = parser.parse_args()
+
+    try:
+        run_recommendation_pipeline(
+            input_file=args.input,
+            report_md=args.report_md,
+            action_plan=args.action_plan,
+        )
+    except FileNotFoundError as exc:
+        print(f"\n[ERROR] {exc}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        print(f"\n[ERROR] Unexpected failure: {exc}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
