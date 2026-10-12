@@ -112,3 +112,32 @@ def main() -> None:
     index_parser.add_argument("--rebuild", action="store_true")
 
     subparsers.add_parser("ai-check", help="Test hosted/local chat inference and embeddings independently")
+
+    status_parser = subparsers.add_parser("status", help="Show database, source and knowledge-base status")
+    status_parser.add_argument("--db", default=settings.db_path)
+    status_parser.add_argument("--vector-store", default=VECTOR_STORE_PATH)
+
+    monitor_parser = subparsers.add_parser("run-monitor", help="Collect, evaluate alerts, then update the knowledge base")
+    monitor_parser.add_argument("--platform", choices=["android", "ios"], default="android")
+    monitor_parser.add_argument("--app-id", default=None)
+    monitor_parser.add_argument("--app-name", default=None)
+    monitor_parser.add_argument("--app-role", choices=["employee", "driver", "competitor"], default="employee")
+    monitor_parser.add_argument("--count", type=int, default=200)
+    monitor_parser.add_argument("--db", default=settings.db_path)
+    monitor_parser.add_argument("--vector-store", default=VECTOR_STORE_PATH)
+
+    step3_parser = subparsers.add_parser("import-step3", help="Import Step 3 recommendations into the tracking database")
+    step3_parser.add_argument("--db", default=settings.db_path)
+
+    args = parser.parse_args()
+
+    if hasattr(args, "db"):
+        init_db(args.db)
+
+    if args.command == "import-existing":
+        result = import_existing_workbook(args.input, args.db, dry_run=args.dry_run)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif args.command == "collect":
+        app_id = args.app_id or (IOS_APP_ID if args.platform == "ios" else settings.default_android_package)
+        app_name = args.app_name or settings.current_app_name
+        result = collect_reviews(args.platform, app_id, app_name, args.count, args.db, app_role=args.app_role)

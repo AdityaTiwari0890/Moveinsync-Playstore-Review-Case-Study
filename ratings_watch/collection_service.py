@@ -24,3 +24,30 @@ class CollectionService:
             elif platform_key == "ios":
                 source = AppleAppSource()
             else:
+                raise ValueError(f"Platform '{platform}' is not supported; choose Android or iOS.")
+            source_reviews = source.fetch_reviews(
+                app_id,
+                app_name=app_name,
+                app_role=kwargs.get("app_role", "employee"),
+                count=count,
+                country=kwargs.get("country", "in"),
+                lang=kwargs.get("lang", "en"),
+            )
+            raw_reviews = source_reviews
+            summary["fetched"] = len(raw_reviews)
+            summary["source_errors_observed"] = bool(getattr(source, "had_errors", False))
+            normalized = normalize_reviews(raw_reviews)
+            summary["rejected"] = len(raw_reviews) - len(normalized)
+            classified = []
+            for review in normalized:
+                review.setdefault("app_name", app_name)
+                review.setdefault("app_role", "employee")
+                review.setdefault("platform", platform)
+                review["collection_timestamp"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+                if review.get("review_text"):
+                    classification = self.classifier.classify(review["review_text"], rating=review.get("rating"))
+                    review["assigned_themes"] = classification["themes"]
+                    review["classification_method"] = classification["classification_method"]
+                    review["heuristic_confidence"] = classification["heuristic_confidence"]
+                    review["is_unclassified"] = classification["is_unclassified"]
+                classified.append(review)

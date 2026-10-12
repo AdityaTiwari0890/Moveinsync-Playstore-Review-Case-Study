@@ -83,3 +83,32 @@ def evaluate_rating_drop(
 
 def evaluate_negative_share_spike(
     db_path: str,
+    threshold: float = ALERT_NEG_RATE_JUMP_THRESHOLD,
+    min_sample: int = ALERT_MIN_SAMPLE,
+) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(db_path)
+    alerts = []
+    try:
+        platforms = [row[0] for row in conn.execute("SELECT DISTINCT platform FROM reviews").fetchall()]
+        for platform in platforms:
+            current = _period_reviews(conn, platform, 7, 0)
+            baseline = _period_reviews(conn, platform, 14, 7)
+            if len(current) < min_sample or len(baseline) < min_sample:
+                continue
+            current_share = 100 * sum(row[1] <= 2 for row in current) / len(current)
+            baseline_share = 100 * sum(row[1] <= 2 for row in baseline) / len(baseline)
+            delta = current_share - baseline_share
+            if delta > threshold:
+                ids = [row[0] for row in current if row[1] <= 2][:20]
+                alerts.append(
+                    {
+                        "alert_type": "negative_share_spike",
+                        "platform": platform,
+                        "baseline_value": round(baseline_share, 2),
+                        "current_value": round(current_share, 2),
+                        "threshold": threshold,
+                        "severity": "high" if delta > threshold * 1.5 else "medium",
+                        "supporting_ids": ids,
+                        "suggested_action": "Compare negative reviews in the current seven-day window with the preceding seven-day baseline.",
+                        "alert_key": f"negative_share_spike:{platform}",
+                        "cooldown_until": _cooldown_until(),

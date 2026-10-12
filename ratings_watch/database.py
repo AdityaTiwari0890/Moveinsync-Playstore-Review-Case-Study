@@ -212,3 +212,57 @@ def init_db(db_path: str = DB_PATH) -> None:
         conn.execute("ALTER TABLE reviews ADD COLUMN is_unclassified INTEGER NOT NULL DEFAULT 0")
     conn.execute(
         "INSERT INTO schema_metadata(key, value) VALUES('schema_version', '3') "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+    )
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO app_registry (platform, store_id, app_name, app_role, first_seen_at, last_seen_at)
+        SELECT platform, store_id, MAX(app_name), MAX(app_role), ?, ?
+        FROM reviews WHERE store_id IS NOT NULL AND store_id != ''
+        GROUP BY platform, store_id
+        """,
+        (now, now),
+    )
+    conn.commit()
+
+
+# ── Review CRUD ──────────────────────────────────────────────────────────────
+
+def upsert_review(review: Dict[str, Any], run_id: Optional[int] = None,
+                  is_imported: bool = False, db_path: str = DB_PATH) -> str:
+    """
+    Insert or update a review record.
+    Returns 'inserted', 'updated', or 'skipped'.
+    Deduplication key: (platform, review_id).
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    themes = review.get("assigned_themes", [])
+    themes_json = json.dumps(themes) if isinstance(themes, list) else (themes or "[]")
+
+    with transaction(db_path) as conn:
+        existing = conn.execute(
+            """SELECT rating, review_text, review_date, app_version, developer_reply,
+                      developer_reply_date, assigned_themes, classification_method,
+                      heuristic_confidence, app_name, app_role, store_id, source_url,
+                      source_collection_timestamp, is_unclassified
+               FROM reviews WHERE platform=? AND review_id=?""",
+            (review.get("platform"), review.get("review_id")),
+        ).fetchone()
+        if review.get("platform") and review.get("store_id"):
+            conn.execute(
+                """
+                INSERT INTO app_registry (platform, store_id, app_name, app_role, first_seen_at, last_seen_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(platform, store_id) DO UPDATE SET
+                    app_name=COALESCE(excluded.app_name, app_registry.app_name),
+                    app_role=COALESCE(excluded.app_role, app_registry.app_role),
+                    last_seen_at=excluded.last_seen_at
+                """,
+                (review.get("platform"), review.get("store_id"), review.get("app_name"),
+                 review.get("app_role"), now, now),
+            )
+
+        if existing:
+            # Refresh only changed source fields; retain previously known optional metadata.
+            changed = (
