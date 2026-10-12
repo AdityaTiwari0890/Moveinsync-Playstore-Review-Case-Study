@@ -111,3 +111,41 @@ def calculate_sample_summary(reviews: List[Dict[str, Any]], requested_count: int
         return {
             "total_reviews": 0,
             "requested_count": requested_count,
+            "target_reached": "No",
+            "avg_rating": None,
+            "star_1_count": 0, "star_1_pct": 0.0,
+            "star_2_count": 0, "star_2_pct": 0.0,
+            "star_3_count": 0, "star_3_pct": 0.0,
+            "star_4_count": 0, "star_4_pct": 0.0,
+            "star_5_count": 0, "star_5_pct": 0.0,
+            "negative_count": 0, "negative_pct": 0.0,
+            "positive_count": 0, "positive_pct": 0.0,
+            "earliest_date": None,
+            "most_recent_date": None,
+            "collection_date": datetime.datetime.now().strftime("%Y-%m-%d"),
+        }
+
+    ratings = [int(r.get("rating") or 0) for r in reviews if r.get("rating")]
+    avg_rating = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+
+    counts = {s: ratings.count(s) for s in range(1, 6)}
+    negative_count = counts[1] + counts[2]
+    positive_count = counts[4] + counts[5]
+
+    dates = [r.get("review_date") for r in reviews if r.get("review_date")]
+    dates_sorted = sorted(dates) if dates else []
+    earliest_date = dates_sorted[0][:10] if dates_sorted else None
+    most_recent_date = dates_sorted[-1][:10] if dates_sorted else None
+
+    return {
+        "total_reviews": total,
+        "requested_count": requested_count,
+        "target_reached": "Yes" if total >= requested_count else "No",
+        "avg_rating": avg_rating,
+        "star_1_count": counts[1],
+        "star_1_pct": round(counts[1] / total * 100, 1),
+        "star_2_count": counts[2],
+        "star_2_pct": round(counts[2] / total * 100, 1),
+        "star_3_count": counts[3],
+        "star_3_pct": round(counts[3] / total * 100, 1),
+        "star_4_count": counts[4],
