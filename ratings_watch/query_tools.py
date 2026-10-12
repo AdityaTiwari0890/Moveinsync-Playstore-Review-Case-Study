@@ -38,3 +38,23 @@ class QueryTools:
         if platform != "all":
             query += " AND platform = ?"
             params.append(platform)
+        query += " GROUP BY substr(review_date, 1, 10) ORDER BY d DESC LIMIT ?"
+        params.append(days)
+        rows = conn.execute(query, params).fetchall()
+        return [{"date": row[0], "avg_rating": round(float(row[1] or 0.0), 2), "review_count": int(row[2])} for row in rows]
+
+    def get_review_counts(self, platform: str = "all") -> Dict[str, Any]:
+        conn = self._conn()
+        query = "SELECT platform, COUNT(*) FROM reviews"
+        params = []
+        if platform != "all":
+            query += " WHERE platform = ?"
+            params.append(platform)
+        query += " GROUP BY platform"
+        by_platform = {platform_name: int(count) for platform_name, count in conn.execute(query, params).fetchall()}
+        return {"by_platform": by_platform, "total": sum(by_platform.values())}
+
+    def get_negative_review_share(self, platform: str = "all") -> float:
+        summary = self.get_rating_summary(platform)
+        return summary["negative_share_pct"]
+

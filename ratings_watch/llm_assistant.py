@@ -111,3 +111,25 @@ class LLMAssistant:
             return {"ok": True, "answer": content.strip()}
         except requests.Timeout:
             return {"ok": False, "error": "Ollama chat request timed out. Check connectivity or try again."}
+        except requests.RequestException:
+            return {"ok": False, "error": "Could not connect to Ollama chat. Check OLLAMA_BASE_URL and network connectivity."}
+        except (ValueError, TypeError):
+            return {"ok": False, "error": "Ollama chat returned invalid JSON or an unsupported response format."}
+
+    def embed(self, texts: List[str], timeout: int = 60) -> List[List[float]]:
+        configuration_error = self.configuration_error("embedding")
+        if configuration_error:
+            raise RuntimeError(configuration_error)
+        if not texts:
+            return []
+        try:
+            response = requests.post(
+                f"{self.base_url}/embed",
+                headers=self._headers(),
+                json={"model": self.embedding_model, "input": texts},
+                timeout=timeout,
+            )
+            if response.status_code != 200:
+                raise RuntimeError(self._response_error(response, "embedding"))
+            payload = response.json()
+            if not isinstance(payload, dict):

@@ -96,3 +96,52 @@ class RagTests(unittest.TestCase):
         client = FakeOllama()
         first = self._index(client)
         self.assertGreater(first["updated"], 3)
+        self.assertEqual(first["index"]["chunk_count"], first["index"]["persisted_vector_count"])
+        self.assertGreater(first["index"]["review_count"], 0)
+        self.assertGreater(first["index"]["recommendation_count"], 0)
+        self.assertGreater(first["index"]["report_chunk_count"], 0)
+        self.assertEqual(get_index_status(self.vector_store)["document_count"], first["updated"])
+        calls = client.embed_calls
+        second = self._index(client)
+        self.assertEqual(second["updated"], 0)
+        self.assertEqual(client.embed_calls, calls)
+
+    def test_failed_rebuild_preserves_existing_index(self):
+        self._index(FakeOllama())
+        before = get_document_hashes(self.vector_store)
+        failing = FakeOllama(fail=True)
+        with self.assertRaisesRegex(RuntimeError, "simulated embedding error"):
+            self._index(failing, rebuild=True)
+        self.assertEqual(before, get_document_hashes(self.vector_store))
+        self.assertTrue(get_index_status(self.vector_store)["last_error"])
+
+    def test_hybrid_answer_uses_sql_metrics_and_validates_citations(self):
+        import_existing_workbook(str(self.workbook), self.database)
+        self._index(FakeOllama())
+        client = FakeOllama()
+        answer = ask_analyst(
+            "Show Android login failure evidence",
+            db_path=self.database,
+            vector_path=self.vector_store,
+            assistant=client,
+        )
+        self.assertTrue(answer["ok"])
+        self.assertEqual(answer["metrics"]["review_sample"]["count"], 1)
+        self.assertEqual(answer["metrics"]["review_sample"]["negative_share_percent"], 100.0)
+        self.assertNotIn("[R999]", answer["answer"])
+        self.assertEqual(answer["invalid_citations_removed"], ["R999"])
+        self.assertIn("untrusted data", client.system_prompt.lower())
+        self.assertEqual(answer["evidence"][0]["metadata"]["review_id"], "review-1")
+
+    def test_ollama_hosted_auth_uses_bearer_and_never_echoes_key(self):
+        class Response:
+            status_code = 401
+
+            def json(self):
+                return {"error": "unauthorized"}
+
+        with patch("ratings_watch.llm_assistant.requests.post", return_value=Response()) as post:
+            assistant = LLMAssistant(
+                api_key="private-test-key",
+                base_url="https://ollama.com/api",
+                model="gemma4:31b",

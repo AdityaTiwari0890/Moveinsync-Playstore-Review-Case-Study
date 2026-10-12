@@ -140,3 +140,32 @@ def ask_analyst(
     db_path: str = DB_PATH,
     vector_path: str = VECTOR_STORE_PATH,
     assistant: Optional[LLMAssistant] = None,
+    top_k: int = 6,
+    conversation: Optional[List[Dict[str, str]]] = None,
+    context_filters: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    if not question.strip():
+        return {"ok": False, "error": "Enter a question to search the analysis."}
+    client = assistant or LLMAssistant()
+    if not client.available():
+        return {
+            "ok": False,
+            "error": client.configuration_error("chat")
+            or "Ollama chat is not configured.",
+        }
+    filters = _question_filters(question)
+    context_filters = context_filters or {}
+    for key in ("platform", "app_name", "app_role", "store_id", "theme"):
+        if context_filters.get(key) is not None:
+            filters.setdefault(key, context_filters[key])
+    if context_filters.get("start_date"):
+        filters.setdefault("date_after", context_filters["start_date"])
+    if context_filters.get("end_date"):
+        filters.setdefault("date_before", context_filters["end_date"])
+    conversation = conversation or []
+    prior_context = "\n".join(
+        f"{turn.get('role', 'user')}: {turn.get('content', '')[:500]}"
+        for turn in conversation[-4:]
+    )
+    search_text = f"{prior_context}\nCurrent question: {question}".strip()
+    try:
