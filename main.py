@@ -83,3 +83,89 @@ def interactive_select_candidate(candidates: List[Dict[str, Any]], platform: str
             manual_id = input(f"Enter {platform} Store URL or App ID: ").strip()
             if manual_id:
                 clean_id = parse_store_id(manual_id, platform)
+                return {"title": "Manual Entry", "app_id": clean_id, "developer": "N/A", "platform": platform}
+            return None
+        if choice.isdigit() and 1 <= int(choice) <= len(candidates):
+            selected = candidates[int(choice) - 1]
+            print(f"--> Selected: {selected.get('title')} ({selected.get('app_id')})")
+            return selected
+        print("Invalid option. Please try again.")
+
+
+def collect_app_target_interactive() -> Optional[Dict[str, Any]]:
+    """Gather details for an app interactively."""
+    print("\n" + "=" * 60)
+    print("ADD APPLICATION TO SCRAPING QUEUE")
+    print("=" * 60)
+    app_name = input("App Name (e.g. MoveInSync, Routematic): ").strip()
+    if not app_name:
+        return None
+
+    # Role
+    print("\nSelect App Category / Role:")
+    print("  [1] Employee-side app (e.g. MoveInSync Employee)")
+    print("  [2] Driver-side app (e.g. MoveInSync Driver)")
+    print("  [3] Competitor app (e.g. Routematic, Safetrax, Whistle)")
+    role_choice = input("Enter choice [1-3] (default 1): ").strip()
+    role_map = {"1": "employee", "2": "driver", "3": "competitor"}
+    app_role = role_map.get(role_choice, "employee")
+
+    # Platform
+    print("\nSelect Platforms to Scrape:")
+    print("  [1] Both Android & iOS")
+    print("  [2] Android only (Google Play)")
+    print("  [3] iOS only (Apple App Store)")
+    plat_choice = input("Enter choice [1-3] (default 1): ").strip()
+    plat_map = {"1": "both", "2": "android", "3": "ios"}
+    platform = plat_map.get(plat_choice, "both")
+
+    android_id = None
+    ios_id = None
+
+    # Android Resolution
+    if platform in ("both", "android"):
+        play_url = input("\nGoogle Play URL or Package ID (leave empty to search): ").strip()
+        if play_url:
+            android_id = parse_store_id(play_url, "android")
+        else:
+            print(f"Searching Google Play Store for '{app_name}'...")
+            candidates = search_play_store(app_name, limit=5)
+            selected = interactive_select_candidate(candidates, "Android")
+            if selected:
+                android_id = selected.get("app_id")
+
+    # iOS Resolution
+    if platform in ("both", "ios"):
+        ios_url = input("\nApple App Store URL or App ID (leave empty to search): ").strip()
+        if ios_url:
+            ios_id = parse_store_id(ios_url, "ios")
+        else:
+            print(f"Searching Apple App Store for '{app_name}'...")
+            candidates = search_app_store(app_name, limit=5)
+            selected = interactive_select_candidate(candidates, "iOS")
+            if selected:
+                ios_id = selected.get("app_id")
+
+    if not android_id and not ios_id:
+        print("[!] No valid store identifiers configured for this app.")
+        return None
+
+    # Review Count
+    count_str = input("\nTarget number of reviews per platform (min 100, default 500, max 10000): ").strip()
+    count = 500
+    if count_str.isdigit():
+        count = max(100, min(10000, int(count_str)))
+
+    return {
+        "app_name": app_name,
+        "app_role": app_role,
+        "platform": platform,
+        "android_id": android_id,
+        "ios_id": ios_id,
+        "count": count,
+    }
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="App Review Intelligence Scraper - Multi-App Play Store & App Store Review Intelligence"
