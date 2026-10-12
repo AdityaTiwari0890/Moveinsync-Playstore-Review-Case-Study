@@ -42,3 +42,17 @@ def _parse_date(v: Any) -> Optional[str]:
         return None
     s = str(v).strip()
     if s in ("", "nan", "None", "NaT"):
+        return None
+    # Already looks ISO-like
+    if re.match(r"\d{4}-\d{2}-\d{2}", s):
+        return s[:19]
+    for fmt in ("%d-%m-%Y", "%m/%d/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(s[:10], fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    return s[:19]
+
+
+def _source_review_id(review: Dict[str, Any]) -> Optional[str]:
+    """Return only a source-provided review identifier."""
