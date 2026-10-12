@@ -188,3 +188,27 @@ class TestAppReviewIntelligenceScraper(unittest.TestCase):
             "Android_Reviews",
             "iOS_Reviews",
             "Combined_Reviews",
+            "App_Summary",
+            "Issue_Themes",
+            "Collection_Log",
+        ]
+        self.assertEqual(wb.sheetnames, expected_sheets, f"Sheets must match {expected_sheets}")
+
+        # Check table creation on Android_Reviews
+        ws_and = wb["Android_Reviews"]
+        self.assertGreater(len(ws_and.tables), 0, "Android_Reviews sheet should have an Excel Table")
+
+        # Check table creation on Issue_Themes
+        ws_th = wb["Issue_Themes"]
+        self.assertGreater(len(ws_th.tables), 0, "Issue_Themes sheet should have an Excel Table")
+
+        wb.close()
+        # Clean up test export
+        try:
+            os.remove(test_file)
+        except Exception:
+            pass
+
+
+if __name__ == "__main__":
+    unittest.main()

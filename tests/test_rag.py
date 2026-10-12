@@ -243,3 +243,52 @@ class RagTests(unittest.TestCase):
         self.assertTrue(all(item["metadata"]["original_review_text"] == review_text for item in chunks))
 
     def test_incremental_index_removes_chunks_when_source_shrinks(self):
+        frame = pd.DataFrame(
+            [
+                {
+                    "Platform": "Android",
+                    "Review ID": "review-1",
+                    "Rating": 1,
+                    "Review Text": "OTP login trouble " * 110,
+                }
+            ]
+        )
+        frame.to_excel(self.workbook, sheet_name="Combined_Reviews", index=False)
+        self._index(FakeOllama())
+        before = get_index_status(self.vector_store)
+        self.assertGreater(before["review_chunk_count"], 1)
+
+        frame["Review Text"] = "OTP login trouble"
+        frame.to_excel(self.workbook, sheet_name="Combined_Reviews", index=False)
+        self._index(FakeOllama())
+        after = get_index_status(self.vector_store)
+        self.assertEqual(after["review_chunk_count"], 1)
+        self.assertEqual(after["persisted_record_count"], before["persisted_record_count"] - (before["review_chunk_count"] - 1))
+
+    def test_step3_action_workbook_with_title_rows_imports_idempotently(self):
+        workbook = self.root / "step3.xlsx"
+        frame = pd.DataFrame(
+            [
+                ["Step 3 title", None, None, None, None, None],
+                ["Priority", "Theme", "Category", "Effort Estimate", "Owner Team", "Suggested Success Metric"],
+                ["P1 - Critical", "Authentication", "Reliability", "Medium", "Engineering", "OTP success rate"],
+            ]
+        )
+        frame.to_excel(workbook, index=False, header=False)
+        first = import_step3_actions("", str(workbook), self.database)
+        second = import_step3_actions("", str(workbook), self.database)
+        self.assertEqual(first, 1)
+        self.assertEqual(second, 0)
+        conn = sqlite3.connect(self.database)
+        try:
+            row = conn.execute(
+                "SELECT priority, theme, owner_team, success_metric, original_row_json FROM action_items"
+            ).fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row[:4], ("P1 - Critical", "Authentication", "Engineering", "OTP success rate"))
+        self.assertIn("Effort Estimate", row[4])
+
+
+if __name__ == "__main__":
+    unittest.main()
