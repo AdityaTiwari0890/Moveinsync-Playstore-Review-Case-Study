@@ -654,3 +654,69 @@ def _collection_status(db_path: str, vector_path: str) -> None:
         st.info("No imported target exists for this platform; using the configured default identifier.")
     count = st.number_input("Maximum reviews to request", min_value=1, max_value=1000, value=200)
     if st.button(f"Collect {selected_platform} reviews"):
+        with st.spinner(f"Requesting reviews from the {selected_platform} source..."):
+            result = collect_reviews(
+                selected_platform.lower(),
+                collection_app_id,
+                collection_app_name,
+                int(count),
+                db_path,
+                app_role=collection_app_role,
+            )
+        if result.get("status") == "success":
+            st.success(json.dumps(result, ensure_ascii=False))
+        else:
+            st.error(json.dumps(result, ensure_ascii=False))
+
+
+def build_dashboard(db_path: str, platform: str = "all") -> None:
+    if st is None or px is None:
+        raise RuntimeError("Dashboard dependencies are missing. Install requirements.txt and run the app with Streamlit.")
+    st.set_page_config(page_title="MOVEINSYNC Ratings Watch", page_icon="📊", layout="wide")
+    st.markdown(
+        """
+        <style>
+        .block-container {padding-top: 1.5rem; padding-bottom: 2rem; max-width: 1500px;}
+        [data-testid="stMetric"] {
+            background: var(--secondary-background-color);
+            color: var(--text-color);
+            border: 1px solid rgba(128, 128, 128, 0.25);
+            padding: 14px 16px;
+            border-radius: 10px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    init_db(db_path)
+    settings = load_settings()
+    vector_path = settings.vector_store_path
+    selected_page = st.sidebar.radio("Workspace", PAGES)
+    filters = _selected_filters(db_path)
+    if selected_page == "Overview":
+        _overview(db_path, vector_path, filters)
+    elif selected_page == "Rating Trends":
+        _rating_trends(db_path, filters)
+    elif selected_page == "Review Explorer":
+        _review_explorer(db_path, filters)
+    elif selected_page == "Complaint Intelligence":
+        _complaints(db_path, filters)
+    elif selected_page == "Alerts":
+        _alerts(db_path)
+    elif selected_page == "Action Plan":
+        _actions(db_path)
+    elif selected_page == "AI Analysis Assistant":
+        _assistant_page(db_path, vector_path, filters)
+    elif selected_page == "Knowledge Base":
+        _knowledge_base(db_path, vector_path)
+    else:
+        _collection_status(db_path, vector_path)
+
+
+def main() -> None:
+    settings = load_settings()
+    build_dashboard(str(Path(settings.db_path)), settings.default_platform)
+
+
+if __name__ == "__main__":
+    main()
