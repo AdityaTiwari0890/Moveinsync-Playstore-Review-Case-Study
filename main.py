@@ -169,3 +169,88 @@ def collect_app_target_interactive() -> Optional[Dict[str, Any]]:
 def main():
     parser = argparse.ArgumentParser(
         description="App Review Intelligence Scraper - Multi-App Play Store & App Store Review Intelligence"
+    )
+    # CLI Mode Arguments
+    parser.add_argument("--app", type=str, help="Application display name")
+    parser.add_argument("--role", type=str, choices=["employee", "driver", "competitor"], default="employee", help="App role category")
+    parser.add_argument("--play-url", type=str, help="Google Play Store URL or package ID")
+    parser.add_argument("--app-store-url", type=str, help="Apple App Store URL or numeric app ID")
+    parser.add_argument("--platform", type=str, choices=["android", "ios", "both"], default="both", help="Platforms to collect")
+    parser.add_argument("--count", type=int, default=500, help="Target review count per platform (min 100, max 10000)")
+    parser.add_argument("--months", type=int, choices=[6, 12], help="Filter reviews to the last 6 or 12 months")
+    parser.add_argument("--start-date", type=str, help="Earliest review date (YYYY-MM-DD)")
+    parser.add_argument("--end-date", type=str, help="Latest review date (YYYY-MM-DD)")
+    parser.add_argument("--country", type=str, default="in", help="Two-letter store country code (default 'in')")
+    parser.add_argument("--output", type=str, help="Output Excel filename (.xlsx)")
+    parser.add_argument("--non-interactive", action="store_true", help="Run without terminal prompts (CLI arguments only)")
+
+    args = parser.parse_args()
+
+    print("=" * 70)
+    print("      APP REVIEW INTELLIGENCE SCRAPER - ENTERPRISE EDITION      ")
+    print("=" * 70)
+
+    # Date Range Calculation
+    start_date = None
+    end_date = None
+    if args.months:
+        start_date = datetime.date.today() - relativedelta(months=args.months)
+        print(f"[*] Date Range Filter: Last {args.months} months (since {start_date})")
+    elif args.start_date:
+        try:
+            start_date = datetime.date.fromisoformat(args.start_date)
+            print(f"[*] Start Date Filter: {start_date}")
+        except Exception:
+            print(f"[!] Invalid start-date format: {args.start_date}")
+
+    if args.end_date:
+        try:
+            end_date = datetime.date.fromisoformat(args.end_date)
+            print(f"[*] End Date Filter: {end_date}")
+        except Exception:
+            print(f"[!] Invalid end-date format: {args.end_date}")
+
+    apps_queue: List[Dict[str, Any]] = []
+
+    # Check CLI input
+    if args.app or args.play_url or args.app_store_url:
+        app_name = args.app or "Target Application"
+        android_id = parse_store_id(args.play_url, "android") if args.play_url else None
+        ios_id = parse_store_id(args.app_store_url, "ios") if args.app_store_url else None
+
+        # If IDs missing in CLI mode and not non-interactive, prompt
+        if not android_id and args.platform in ("both", "android"):
+            print(f"Searching Google Play Store for '{app_name}'...")
+            cands = search_play_store(app_name, limit=5, country=args.country)
+            if args.non_interactive and cands:
+                android_id = cands[0]["app_id"]
+            else:
+                sel = interactive_select_candidate(cands, "Android")
+                if sel:
+                    android_id = sel.get("app_id")
+
+        if not ios_id and args.platform in ("both", "ios"):
+            print(f"Searching Apple App Store for '{app_name}'...")
+            cands = search_app_store(app_name, limit=5, country=args.country)
+            if args.non_interactive and cands:
+                ios_id = cands[0]["app_id"]
+            else:
+                sel = interactive_select_candidate(cands, "iOS")
+                if sel:
+                    ios_id = sel.get("app_id")
+
+        target_count = max(100, min(10000, args.count))
+        apps_queue.append({
+            "app_name": app_name,
+            "app_role": args.role,
+            "platform": args.platform,
+            "android_id": android_id,
+            "ios_id": ios_id,
+            "count": target_count,
+        })
+    else:
+        # Full Interactive Terminal Wizard
+        print("\nEntering Interactive Configuration Wizard...")
+        while True:
+            target = collect_app_target_interactive()
+            if target:
