@@ -194,3 +194,52 @@ class RagTests(unittest.TestCase):
             chat = assistant.ask("Reply OK")
             vectors = assistant.embed(["query"])
         self.assertEqual(chat, {"ok": True, "answer": "OK"})
+        self.assertEqual(vectors, [[0.1, 0.2]])
+        self.assertEqual(post.call_args_list[0].args[0], "https://ollama.com/api/chat")
+        self.assertEqual(post.call_args_list[1].args[0], "https://ollama.com/api/embed")
+        self.assertEqual(
+            post.call_args_list[1].kwargs["json"],
+            {"model": "embeddinggemma", "input": ["query"]},
+        )
+
+    def test_relative_config_paths_are_project_rooted(self):
+        self.assertEqual(resolve_project_path("ratings_watch_vectors.db"), PROJECT_ROOT / "ratings_watch_vectors.db")
+        absolute = self.root / "explicit-vectors.db"
+        self.assertEqual(resolve_project_path(absolute), absolute)
+
+    def test_status_reports_unopenable_vector_store_without_claiming_readiness(self):
+        broken_store = self.root / "broken-vectors.db"
+        broken_store.write_text("not a SQLite database", encoding="utf-8")
+        status = get_index_status(str(broken_store))
+        self.assertEqual(status["document_count"], 0)
+        self.assertIn("could not be opened", status["store_error"])
+
+    def test_long_review_is_split_into_source_linked_chunks(self):
+        workbook = self.root / "long-review.xlsx"
+        review_text = "OTP login trouble " * 110
+        pd.DataFrame(
+            [
+                {
+                    "Platform": "Android",
+                    "Review ID": "long-review-1",
+                    "Rating": 1,
+                    "Review Text": review_text,
+                }
+            ]
+        ).to_excel(workbook, sheet_name="Combined_Reviews", index=False)
+        docs = discover_documents(
+            str(workbook),
+            str(self.root / "missing-recommendations.md"),
+            str(self.root / "missing-actions.xlsx"),
+            self.database,
+        )
+        chunks = [
+            item for item in docs
+            if item["metadata"].get("review_id") == "long-review-1"
+        ]
+        self.assertGreater(len(chunks), 1)
+        self.assertEqual({item["metadata"]["chunk_count"] for item in chunks}, {len(chunks)})
+        self.assertTrue(all(item["metadata"]["sheet"] == "Combined_Reviews" for item in chunks))
+        self.assertTrue(all(item["metadata"]["original_review_text"] == review_text for item in chunks))
+
+    def test_incremental_index_removes_chunks_when_source_shrinks(self):
