@@ -326,3 +326,68 @@ def _rating_trends(db_path: str, filters: Dict[str, Any]) -> None:
             negative_share_percent=("rating", lambda values: (values <= 2).mean() * 100),
         ).reset_index()
         if not versions.empty:
+            st.subheader("App-version sample comparison")
+            st.caption("Version labels come from review records and are not release-time causal analysis.")
+            st.dataframe(versions, use_container_width=True, hide_index=True)
+    snapshot_rows = _rows(
+        db_path,
+        "SELECT platform, official_rating, rating_source, snapshot_at FROM rating_snapshots WHERE official_rating IS NOT NULL ORDER BY snapshot_at",
+    )
+    if len(snapshot_rows) >= 2:
+        snapshot_data = pd.DataFrame(snapshot_rows)
+        st.plotly_chart(px.line(snapshot_data, x="snapshot_at", y="official_rating", color="platform", markers=True, title="Recorded published-rating snapshots"), use_container_width=True)
+    else:
+        st.info("Historical store-rating trend will appear after at least two genuine rating snapshots have been recorded.")
+
+
+def _review_explorer(db_path: str, filters: Dict[str, Any]) -> None:
+    st.title("Review Explorer")
+    data = _filtered_review_data(db_path, filters)
+    if data.empty:
+        st.info("No reviews match the current filters.")
+        return
+    search = st.text_input("Search original review text")
+    if search:
+        data = data[data["review_text"].fillna("").str.contains(search, case=False, regex=False)]
+    rating_options = sorted(int(value) for value in data["rating"].dropna().unique())
+    selected_ratings = st.multiselect("Rating", rating_options, default=rating_options)
+    if selected_ratings:
+        data = data[data["rating"].isin(selected_ratings)]
+    if not data.empty:
+        display_fields = [
+            field for field in (
+                "review_id", "platform", "app_name", "app_role", "rating", "review_date",
+                "app_version", "assigned_themes", "heuristic_confidence", "review_text",
+                "is_unclassified",
+                "developer_reply", "source_url", "first_collected_at", "last_updated_at", "is_imported",
+                "source_collection_timestamp",
+            ) if field in data.columns
+        ]
+        st.caption(f"{len(data):,} matching reviews (display capped at 2,000). Review text is unchanged from the source.")
+        export = data[display_fields].copy()
+        export["assigned_themes"] = export["assigned_themes"].apply(lambda item: ", ".join(_theme_list(item)))
+        st.download_button("Export filtered reviews (CSV)", export.to_csv(index=False).encode("utf-8-sig"), "filtered_reviews.csv", "text/csv")
+        st.dataframe(export.head(2000), use_container_width=True, hide_index=True)
+        if "review_id" in data.columns:
+            selected_id = st.selectbox("Review detail", data["review_id"].astype(str).tolist())
+            selected = data[data["review_id"].astype(str) == selected_id].iloc[0]
+            with st.expander("Full review and source metadata", expanded=True):
+                st.write(str(selected.get("review_text") or ""))
+                st.json(
+                    {
+                        key: (None if pd.isna(selected.get(key)) else selected.get(key))
+                        for key in (                                                "review_id", "platform", "app_name", "app_role", "rating", "review_date", "app_version", "assigned_themes", "heuristic_confidence", "is_unclassified", "source_url", "developer_reply", "developer_reply_date", "source_collection_timestamp", "first_collected_at", "last_updated_at", "is_imported")
+                    }
+                )
+    else:
+        st.info("No reviews remain after the search and rating filters.")
+
+
+def _complaints(db_path: str, filters: Dict[str, Any]) -> None:
+    st.title("Complaint Intelligence")
+    data = _filtered_review_data(db_path, filters)
+    themes = _theme_rows(data, negative_only=True)
+    if themes.empty:
+        st.info("No theme-classified negative reviews match the current filters.")
+        return
+    negative_total = int((data["rating"] <= 2).sum()) if not data.empty else 0
