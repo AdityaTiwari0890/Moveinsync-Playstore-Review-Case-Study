@@ -120,3 +120,28 @@ class Step4Tests(unittest.TestCase):
             self.assertEqual(
                 conn.execute("SELECT is_unclassified FROM reviews WHERE review_id='live-id'").fetchone()[0],
                 1,
+            )
+        finally:
+            conn.close()
+
+    def test_ios_adapter_delegates_to_existing_step1_rss_collector(self):
+        with patch("app_store_scraper.scrape_app_store_reviews", return_value=[]) as scrape:
+            AppleAppSource().fetch_reviews(
+                "962949521",
+                app_name="MoveInSync",
+                app_role="employee",
+                count=100,
+                country="in",
+            )
+        scrape.assert_called_once_with(
+            app_id="962949521",
+            app_name="MoveInSync",
+            app_role="employee",
+            count=100,
+            country="in",
+            log_callback=ANY,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
