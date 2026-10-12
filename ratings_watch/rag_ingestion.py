@@ -221,3 +221,59 @@ def discover_documents(
                     fields = [(key, value) for key, value in fields if value]
                     if not fields:
                         continue
+                    body = "\n".join(f"{key}: {value}" for key, value in fields)
+                    doc_id = f"action-plan:{action_path.name}:{sheet}:{int(index) + 2}"
+                    _add_chunked_document(
+                        documents,
+                        doc_id,
+                        f"Action plan: {action_path.name}\nSheet: {sheet}\n{body}",
+                        {
+                            "source_type": "recommendation",
+                            "source_name": action_path.name,
+                            "source_path": str(action_path),
+                            "sheet": sheet,
+                            "row": int(index) + 2,
+                        },
+                    )
+
+    db = database
+    if db.exists():
+        conn = sqlite3.connect(str(db))
+        conn.row_factory = sqlite3.Row
+        try:
+            workbook_review_metadata = {
+                str(item["metadata"].get("parent_document_id") or item["document_id"]): item["metadata"]
+                for item in documents.values()
+                if item["metadata"].get("source_type") == "review"
+            }
+            for row in conn.execute(
+                "SELECT review_id, platform, app_name, app_role, rating, review_text, review_date, app_version, assigned_themes, heuristic_confidence, is_unclassified, source_url, source_collection_timestamp FROM reviews"
+            ):
+                doc_id = f"review:{row['platform']}:{row['review_id']}"
+                themes = json.loads(row["assigned_themes"] or "[]")
+                content = (
+                    f"Review ID: {row['review_id']}\nPlatform: {row['platform']}\n"
+                    f"App: {row['app_name'] or 'Unavailable'}\nRole: {row['app_role'] or 'Unavailable'}\n"
+                    f"Rating: {row['rating']}\nDate: {row['review_date'] or 'Unavailable'}\n"
+                    f"Version: {row['app_version'] or 'Unavailable'}\nThemes: {', '.join(themes) or 'Unclassified / no theme assigned'}\n"
+                    f"Review: {row['review_text'] or ''}"
+                )
+                metadata = {
+                    "source_type": "review",
+                    "source_name": "ratings_watch.db",
+                    "source_path": str(db),
+                    "review_id": row["review_id"],
+                    "platform": row["platform"],
+                    "app_name": row["app_name"],
+                    "app_role": row["app_role"],
+                    "rating": row["rating"],
+                    "review_date": row["review_date"],
+                    "source_collection_timestamp": row["source_collection_timestamp"],
+                    "app_version": row["app_version"],
+                    "themes": themes,
+                    "confidence": row["heuristic_confidence"],
+                    "is_unclassified": bool(row["is_unclassified"]),
+                    "source_url": row["source_url"],
+                    "original_review_text": row["review_text"] or "",
+                }
+                if doc_id in workbook_review_metadata:
