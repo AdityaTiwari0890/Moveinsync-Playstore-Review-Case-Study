@@ -164,3 +164,27 @@ class TestAppReviewIntelligenceScraper(unittest.TestCase):
             "timestamp": "2026-10-12 12:00:00", "app_name": "MoveInSync", "platform": "Android",
             "store_id": "com.moveinsync.ets", "status": "SUCCESS", "requested_count": 100,
             "retrieved_count": 1, "data_source": "google-play-scraper",
+            "message": "Sample test log", "limitation_note": ""
+        }]
+
+        export_intelligence_workbook(
+            android_reviews=mock_android,
+            ios_reviews=mock_ios,
+            combined_reviews=mock_combined,
+            metadata_list=mock_meta,
+            summary_metrics=mock_sm,
+            monthly_trends=mock_mt,
+            segment_comparisons=mock_sc,
+            issue_themes=mock_th,
+            collection_logs=mock_logs,
+            output_filepath=test_file,
+        )
+
+        self.assertTrue(os.path.exists(test_file), "Excel file should exist")
+
+        # Load and verify sheets using openpyxl
+        wb = openpyxl.load_workbook(test_file)
+        expected_sheets = [
+            "Android_Reviews",
+            "iOS_Reviews",
+            "Combined_Reviews",
