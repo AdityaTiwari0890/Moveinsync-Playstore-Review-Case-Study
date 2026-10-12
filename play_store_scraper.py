@@ -42,3 +42,25 @@ def search_play_store(query: str, country: str = "in", lang: str = "en", limit: 
                     pass
 
             if app_id and app_id not in seen_ids:
+                seen_ids.add(app_id)
+                candidates.append({
+                    "title": item.get("title", "Unknown App"),
+                    "app_id": app_id,
+                    "developer": item.get("developer", "Unknown Developer"),
+                    "score": round(float(item.get("score") or 0.0), 2) if item.get("score") else None,
+                    "installs": item.get("installs", ""),
+                    "icon": item.get("icon", ""),
+                    "store_url": f"https://play.google.com/store/apps/details?id={app_id}",
+                    "platform": "Android"
+                })
+                if len(candidates) >= limit:
+                    break
+    except Exception as exc:
+        pass
+
+    return candidates
+
+
+def scrape_play_store_reviews(
+    package_id: str,
+    app_name: str,
