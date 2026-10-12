@@ -127,3 +127,67 @@ The wizard will interactively prompt you for:
 
 ### Option B: Command-Line (CLI) Mode
 
+Run directly with command-line arguments for automated or scripted execution:
+
+#### 1. MoveInSync Employee App (Android Only, 500 Reviews)
+```powershell
+python main.py --app "MoveInSync" --play-url "com.moveinsync.ets" --platform android --count 500 --output "MoveInSync_Employee_Reviews.xlsx"
+```
+
+#### 2. MoveInSync Driver App (Android Only, Last 6 Months)
+```powershell
+python main.py --app "MoveInSync Driver" --play-url "com.moveinsync.driver.dco" --role driver --platform android --months 6 --output "MoveInSync_Driver_6M.xlsx"
+```
+
+#### 3. Both Android & iOS with Candidate Auto-Search
+```powershell
+python main.py --app "MoveInSync" --platform both --count 200 --output "MoveInSync_CrossPlatform.xlsx"
+```
+
+#### 4. Date Range Filter (e.g., Last 12 Months)
+```powershell
+python main.py --app "MoveInSync" --play-url "com.moveinsync.ets" --months 12 --count 1000
+```
+
+#### 5. Custom Date Range
+```powershell
+python main.py --app "MoveInSync" --play-url "com.moveinsync.ets" --start-date "2026-01-01" --end-date "2026-10-12"
+```
+
+---
+
+### Option C: Step 2 — Running the Analysis Engine
+
+To analyze any existing scraper output workbook (such as `App_Review_Intelligence_MoveInSync_20261012_173118.xlsx`):
+
+#### 1. Standard Analysis Run
+```powershell
+python analysis_engine.py --input "App_Review_Intelligence_MoveInSync_20261012_173118.xlsx"
+```
+*Outputs:*
+- Enhanced 11-sheet workbook: `App_Review_Intelligence_MoveInSync_20261012_173118_Analyzed.xlsx`
+- Executive report: `MOVEIN_SYNC_ANALYSIS_REPORT.md`
+
+#### 2. Custom Output Path & Sample Threshold
+```powershell
+python analysis_engine.py --input "App_Review_Intelligence_MoveInSync_20261012_173118.xlsx" --output "MoveInSync_Intelligence_Report.xlsx" --min-sample 20
+```
+
+---
+
+## Standardized Review Schema
+
+All collected reviews conform to the following schema across both platforms:
+
+| Field | Description | Example |
+|---|---|---|
+| `App Name` | Application display name | `MoveInSync` |
+| `Store ID` | Package name (Android) or Numeric ID (iOS) | `com.moveinsync.ets` / `962949521` |
+| `Platform` | Operating system platform | `Android` / `iOS` |
+| `App Role` | Segment classification | `employee` / `driver` / `competitor` |
+| `Review ID` | Platform review ID or deterministic hash | `<store-review-id>` |
+| `Reviewer Name` | Name supplied by the store, when available | `<reviewer-name>` |
+| `Rating` | Star rating (1 to 5) | `5` |
+| `Review Title` | Review title (iOS only; blank for Android) | `Smooth commute app` |
+| `Review Text` | Full customer review commentary | `<review text>` |
+| `Review Date` | Review date and time (`YYYY-MM-DD HH:MM:SS`) | `<review timestamp>` |
