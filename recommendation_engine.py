@@ -749,3 +749,153 @@ def build_rating_strategy() -> pd.DataFrame:
             "Estimated Timeline": "Process setup: 2 weeks; ongoing weekly cadence",
             "Compliance Note": "Allowed by both store platforms. Do not request rating changes in responses.",
             "Success Metric": "100% of 1★ reviews receive a response within 5 business days; escalation-to-resolution loop tracked in Action Plan workbook (baseline: 0 structured responses currently)",
+            "Status": "Open",
+        },
+        {
+            "Initiative": "Recurring review monitoring and release regression alerts",
+            "Type": "Engineering / Operations",
+            "Description": (
+                "Schedule a weekly automated run of the Step 2 analysis engine after each app "
+                "release. Flag any version with a rating drop ≥ 0.30★ or negative-review-rate "
+                "jump ≥ 15% (current thresholds). Alert the release manager via email or Slack "
+                "within 24 h of the regression being detected. Correlate with internal crash and "
+                "ANR telemetry to distinguish app defects from operational disruptions."
+            ),
+            "Owner": "Release Engineering + Product",
+            "Estimated Timeline": "4–6 weeks (automation setup)",
+            "Compliance Note": "Internal monitoring only. No policy concerns.",
+            "Success Metric": "Regression alerts trigger within 24 h of qualifying version release; mean time-to-acknowledge ≤ 4 h (baseline: no current automated monitoring)",
+            "Status": "Open",
+        },
+    ]
+    return pd.DataFrame(rows)
+
+
+# ===========================================================================
+# PLATFORM COMPARISON
+# ===========================================================================
+
+def build_platform_comparison(metrics: Dict[str, Any], regression_df: pd.DataFrame) -> Dict[str, Any]:
+    """
+    Summarise Android vs iOS differences with sample-size guards.
+    Returns a dict of structured comparison data.
+    """
+    android_n = metrics.get("android_n", 0)
+    ios_n = metrics.get("ios_n", 0)
+    android_rating = metrics.get("android_rating", "N/A")
+    ios_rating = metrics.get("ios_rating", "N/A")
+    android_neg = metrics.get("android_neg", "N/A")
+    ios_neg = metrics.get("ios_neg", "N/A")
+
+    MIN_SAMPLE = 30
+    android_sufficient = int(str(android_n).replace(",", "") or 0) >= MIN_SAMPLE
+    ios_sufficient = int(str(ios_n).replace(",", "") or 0) >= MIN_SAMPLE
+
+    try:
+        rating_gap = round(float(android_rating) - float(ios_rating), 2)
+    except (TypeError, ValueError):
+        rating_gap = None
+
+    try:
+        neg_gap = round(float(android_neg) - float(ios_neg), 1)
+    except (TypeError, ValueError):
+        neg_gap = None
+
+    regressions = []
+    if not regression_df.empty:
+        for _, row in regression_df.iterrows():
+            regressions.append({
+                "app": row.get("App Name", ""),
+                "platform": row.get("Platform", ""),
+                "prior_ver": row.get("Prior Version", ""),
+                "current_ver": row.get("Current Version", ""),
+                "rating_delta": row.get("Rating Delta", ""),
+                "neg_jump": row.get("Negative Rate Jump %", ""),
+                "observation": row.get("Association Assessment", ""),
+            })
+
+    return {
+        "android_n": android_n,
+        "ios_n": ios_n,
+        "android_rating": android_rating,
+        "ios_rating": ios_rating,
+        "android_neg": android_neg,
+        "ios_neg": ios_neg,
+        "android_sufficient": android_sufficient,
+        "ios_sufficient": ios_sufficient,
+        "rating_gap": rating_gap,
+        "neg_gap": neg_gap,
+        "regressions": regressions,
+        "min_sample": MIN_SAMPLE,
+    }
+
+
+# ===========================================================================
+# EXCEL ACTION PLAN WORKBOOK
+# ===========================================================================
+
+def _style_header_row(ws, row_num: int, max_col: int, fill_color: str = NAVY):
+    """Apply navy bold header styling to a row."""
+    hf = Font(name="Calibri", size=10, bold=True, color=WHITE)
+    hfill = PatternFill(start_color=fill_color, end_color=fill_color, fill_type="solid")
+    for col in range(1, max_col + 1):
+        cell = ws.cell(row=row_num, column=col)
+        cell.font = hf
+        cell.fill = hfill
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+
+def _style_data_rows(ws, start_row: int, end_row: int):
+    """Apply consistent body styling."""
+    rf = Font(name="Calibri", size=9)
+    thin = Border(
+        left=Side(style="thin", color=LIGHT_GRAY),
+        right=Side(style="thin", color=LIGHT_GRAY),
+        top=Side(style="thin", color=LIGHT_GRAY),
+        bottom=Side(style="thin", color=LIGHT_GRAY),
+    )
+    for row in ws.iter_rows(min_row=start_row, max_row=end_row):
+        for cell in row:
+            cell.font = rf
+            cell.border = thin
+            cell.alignment = Alignment(vertical="top", wrap_text=True)
+            # Highlight critical priority rows
+            if cell.column == 1 and "P1" in str(cell.value or ""):
+                cell.fill = PatternFill(start_color=RED_FILL, end_color=RED_FILL, fill_type="solid")
+            elif cell.column == 1 and "P2" in str(cell.value or ""):
+                cell.fill = PatternFill(start_color=AMBER_FILL, end_color=AMBER_FILL, fill_type="solid")
+            elif cell.column == 1 and "P3" in str(cell.value or ""):
+                cell.fill = PatternFill(start_color=GREEN_FILL, end_color=GREEN_FILL, fill_type="solid")
+            # Highlight Quick Wins green
+            elif cell.column == 1 and "Quick Win" in str(cell.value or ""):
+                cell.fill = PatternFill(start_color=GREEN_FILL, end_color=GREEN_FILL, fill_type="solid")
+            elif cell.column == 1 and "Major Project" in str(cell.value or ""):
+                cell.fill = PatternFill(start_color=AMBER_FILL, end_color=AMBER_FILL, fill_type="solid")
+
+
+def _auto_col_widths(ws):
+    for col in ws.columns:
+        max_len = 0
+        col_letter = get_column_letter(col[0].column)
+        for cell in col:
+            if cell.value:
+                first_line = str(cell.value).split("\n")[0]
+                max_len = max(max_len, min(len(first_line), 80))
+        ws.column_dimensions[col_letter].width = max(12, min(max_len + 3, 60))
+
+
+def _add_excel_table(ws, table_name: str, start_row: int, end_row: int, style: str = "TableStyleLight9"):
+    if end_row < start_row:
+        return
+    max_col = ws.max_column
+    ref = f"A{start_row}:{get_column_letter(max_col)}{end_row}"
+    tab = Table(displayName=table_name, ref=ref)
+    tab.tableStyleInfo = TableStyleInfo(
+        name=style, showFirstColumn=False, showLastColumn=False,
+        showRowStripes=True, showColumnStripes=False,
+    )
+    ws.add_table(tab)
+
+
+def generate_action_plan_xlsx(
+    priority_df: pd.DataFrame,
