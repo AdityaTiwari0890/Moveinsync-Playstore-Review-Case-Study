@@ -5,7 +5,10 @@ An enterprise-ready Python solution to scrape, analyze, and benchmark mobile app
 > Review datasets, SQLite databases, and generated reports are intentionally excluded from this repository because they can contain reviewer identifiers and verbatim customer comments. Provide the source workbooks locally when running the analysis.
 
 Report - https://drive.google.com/file/d/10fzLKUOrdGiXHgQp12I6hxeaHLjaURKM/view?usp=sharing
+
 Reviews with analysis - https://docs.google.com/spreadsheets/d/1kIvhi35SveEbQI1DqjfE51ZOhAOuPTZG/edit?usp=sharing&ouid=118233679977606631667&rtpof=true&sd=true
+
+
 Case Study resources - https://drive.google.com/drive/folders/1zPzSy4mqzQubb9BnXEfaz8cA5fHsMNE2?usp=sharing
 ---
 
