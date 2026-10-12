@@ -457,3 +457,69 @@ def _actions(db_path: str) -> None:
     selected_id = st.selectbox("Action item", [row["id"] for row in actions])
     selected = next(row for row in actions if row["id"] == selected_id)
     with st.expander("Imported recommendation evidence and metadata"):
+        try:
+            st.json(json.loads(selected.get("original_row_json") or "{}"))
+        except (TypeError, ValueError):
+            st.write(selected.get("original_row_json") or "No original row metadata.")
+    statuses = ["Open", "Investigating", "In Progress", "Resolved", "Monitoring", "Blocked"]
+    current = selected.get("status") or "Open"
+    new_status = st.selectbox("Status", statuses, index=statuses.index(current) if current in statuses else 0)
+    notes = st.text_area("Tracking notes", value=selected.get("notes") or "")
+    if st.button("Save action status"):
+        update_action_status(int(selected_id), new_status, notes, db_path)
+        st.success("Action status saved.")
+
+
+def _assistant_page(db_path: str, vector_path: str, filters: Dict[str, Any]) -> None:
+    st.title("AI Analysis Assistant")
+    st.caption("Hybrid retrieval combines persistent semantic search across project artifacts with safe, predefined SQLite queries.")
+    if st.button("Clear conversation"):
+        st.session_state["rw_chat_assistant"] = []
+        st.rerun()
+    status = get_index_status(vector_path)
+    st.info(
+        f"Knowledge base: {status['document_count']} indexed documents · "
+        f"Embedding model: {status.get('embedding_model') or OLLAMA_EMBEDDING_MODEL} · "
+        f"Index date: {status.get('last_indexed_at') or 'not indexed'}"
+    )
+    _render_chat(db_path, vector_path, "assistant", filters)
+    with st.expander("Suggested questions"):
+        st.write(
+            "Why are ratings low? · What evidence supports the login issue? · Compare Android and iOS samples. · "
+            "What did Step 3 recommend? · What changed recently? · Generate a two-week evidence-backed action plan."
+        )
+
+
+def _knowledge_base(db_path: str, vector_path: str) -> None:
+    st.title("Knowledge Base")
+    try:
+        pending_count = count_pending_documents(
+            EXISTING_WORKBOOK, STEP3_MD, STEP3_ACTION_PLAN, db_path, vector_path
+        )
+    except Exception as exc:
+        pending_count = None
+        st.warning(f"Could not inspect all configured knowledge sources: {exc}")
+    source_status = inspect_knowledge_sources(
+        EXISTING_WORKBOOK, STEP3_MD, STEP3_ACTION_PLAN, db_path
+    )
+    status = get_index_status(vector_path, pending_count=pending_count)
+    connection = st.session_state.get("rw_ollama_connection_status")
+    index_ready = bool(
+        source_status["workbook_exists"]
+        and source_status["total_chunks_generated"] > 0
+        and status["document_count"] > 0
+        and status["persisted_vector_count"] == status["chunk_count"]
+        and status["invalid_vector_count"] == 0
+        and not status.get("store_error")
+        and not status.get("last_error")
+    )
+    service_ready = bool(
+        connection and connection.get("chat", {}).get("ok")
+        and connection.get("embedding", {}).get("ok")
+    )
+    full_ready = index_ready and service_ready
+    st.subheader("Knowledge-base diagnostics")
+    st.write({
+        "rag_readiness": "Ready" if full_ready else "Not ready",
+        "index_reopen_validation": "Passed" if index_ready else "Not ready",
+        "workbook_path": source_status["workbook_path"],
