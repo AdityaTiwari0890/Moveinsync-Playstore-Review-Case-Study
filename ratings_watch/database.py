@@ -320,3 +320,56 @@ def upsert_review(review: Dict[str, Any], run_id: Optional[int] = None,
                 assigned_themes, classification_method, heuristic_confidence,
                 is_unclassified,
                 source_url, source_collection_timestamp, first_collected_at, last_updated_at,
+                collection_run_id, is_imported
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (
+                review.get("review_id"), review.get("platform"), review.get("store_id"),
+                review.get("app_name"), review.get("app_role"), review.get("reviewer_name"),
+                review.get("rating"), review.get("review_title"), review.get("review_text"),
+                review.get("review_date"), review.get("app_version"),
+                review.get("developer_reply"), review.get("developer_reply_date"),
+                review.get("helpful_votes", 0),
+                themes_json, review.get("classification_method"),
+                review.get("heuristic_confidence"), int(bool(review.get("is_unclassified", False))),
+                review.get("source_url"),
+                review.get("source_collection_timestamp"),
+                now, now, run_id, int(is_imported),
+            ),
+        )
+        return "inserted"
+
+
+def bulk_upsert_reviews(reviews: List[Dict[str, Any]], run_id: Optional[int] = None,
+                        is_imported: bool = False, db_path: str = DB_PATH) -> Dict[str, int]:
+    """Upsert a list of reviews. Returns counts of inserted/updated/skipped."""
+    counts = {"inserted": 0, "updated": 0, "skipped": 0, "failed": 0}
+    for r in reviews:
+        try:
+            result = upsert_review(r, run_id=run_id, is_imported=is_imported, db_path=db_path)
+            counts[result] += 1
+        except Exception:
+            counts["failed"] += 1
+    return counts
+
+
+# ── Collection runs ──────────────────────────────────────────────────────────
+
+def start_collection_run(platform: str, db_path: str = DB_PATH) -> int:
+    """Create a new collection run record and return its ID."""
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        cur = conn.execute(
+            "INSERT INTO collection_runs (started_at, platform, status) VALUES (?,?,?)",
+            (now, platform, "running"),
+        )
+        return cur.lastrowid
+
+
+def finish_collection_run(run_id: int, status: str, counts: Dict[str, int],
+                          error: Optional[str] = None, notes: Optional[str] = None,
+                          db_path: str = DB_PATH) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        conn.execute(
+            """UPDATE collection_runs SET completed_at=?, status=?,
+               fetched=?, inserted=?, updated=?, skipped=?, failed=?,

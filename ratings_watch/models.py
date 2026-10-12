@@ -34,3 +34,22 @@ class RatingSnapshot:
     observed_at: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
+
+@dataclass
+class AlertRecord:
+    alert_id: Optional[int] = None
+    alert_type: str = "rating_drop"
+    platform: str = "all"
+    affected_theme: Optional[str] = None
+    baseline_measurement: Optional[float] = None
+    current_measurement: Optional[float] = None
+    threshold: Optional[float] = None
+    severity: str = "medium"
+    detection_timestamp: Optional[str] = None
+    status: str = "open"
+    supporting_ids: List[str] = field(default_factory=list)
+    suggested_next_step: str = "Investigate"
+
+
+def utc_now_iso() -> str:
+    return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -47,3 +47,27 @@ class Step4Tests(unittest.TestCase):
     def test_rating_metrics_and_negative_share(self):
         conn = sqlite3.connect(self.db_path)
         conn.execute("INSERT INTO reviews (review_id, platform, app_name, rating, review_text, review_date, first_collected_at, last_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("a1", "Android", "MoveInSync", 5, "good", "2026-01-05", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+        conn.execute("INSERT INTO reviews (review_id, platform, app_name, rating, review_text, review_date, first_collected_at, last_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", ("a2", "Android", "MoveInSync", 2, "bad", "2026-01-06", "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+        conn.commit()
+        conn.close()
+
+        summary = get_rating_summary(self.db_path, platform="Android")
+        self.assertAlmostEqual(summary["average_rating"], 3.5, places=2)
+        self.assertEqual(summary["negative_share"], 50.0)
+        self.assertEqual(get_negative_review_share(self.db_path, platform="Android"), 50.0)
+
+    def test_alert_generation_and_deduplication(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO rating_snapshots (platform, store_id, app_name, official_rating, rating_source, snapshot_at) VALUES (?, ?, ?, ?, ?, ?)", ("Android", "pkg", "MoveInSync", 4.0, "manual", "2026-01-01T00:00:00Z"))
+        conn.execute("INSERT INTO rating_snapshots (platform, store_id, app_name, official_rating, rating_source, snapshot_at) VALUES (?, ?, ?, ?, ?, ?)", ("Android", "pkg", "MoveInSync", 3.0, "manual", "2026-01-10T00:00:00Z"))
+        conn.execute("INSERT INTO reviews (review_id, platform, app_name, rating, review_text, review_date, assigned_themes, first_collected_at, last_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", ("z1", "Android", "MoveInSync", 1, "login failed", "2026-01-10", '["Login and account access"]', "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+        conn.execute("INSERT INTO reviews (review_id, platform, app_name, rating, review_text, review_date, assigned_themes, first_collected_at, last_updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", ("z2", "Android", "MoveInSync", 1, "login failed", "2026-01-11", '["Login and account access"]', "2026-01-01T00:00:00Z", "2026-01-01T00:00:00Z"))
+        conn.commit()
+        conn.close()
+
+        alerts = collect_alerts(self.db_path)
+        self.assertTrue(any(a["alert_type"] == "rating_drop" for a in alerts))
+        self.assertEqual(collect_alerts(self.db_path), [])
+        conn = sqlite3.connect(self.db_path)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0], 1)

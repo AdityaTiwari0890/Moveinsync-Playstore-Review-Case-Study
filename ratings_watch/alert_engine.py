@@ -112,3 +112,32 @@ def evaluate_negative_share_spike(
                         "suggested_action": "Compare negative reviews in the current seven-day window with the preceding seven-day baseline.",
                         "alert_key": f"negative_share_spike:{platform}",
                         "cooldown_until": _cooldown_until(),
+                    }
+                )
+        return alerts
+    finally:
+        conn.close()
+
+
+def evaluate_one_star_spike(
+    db_path: str,
+    threshold: float = ALERT_ONE_STAR_SPIKE_THRESHOLD,
+    min_sample: int = ALERT_MIN_SAMPLE,
+) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(db_path)
+    alerts = []
+    try:
+        platforms = [row[0] for row in conn.execute("SELECT DISTINCT platform FROM reviews").fetchall()]
+        for platform in platforms:
+            current = _period_reviews(conn, platform, 7, 0)
+            baseline = _period_reviews(conn, platform, 14, 7)
+            if len(current) < min_sample or len(baseline) < min_sample:
+                continue
+            current_ones = [row[0] for row in current if row[1] == 1]
+            baseline_ones = sum(row[1] == 1 for row in baseline)
+            current_share = 100 * len(current_ones) / len(current)
+            baseline_share = 100 * baseline_ones / len(baseline)
+            delta = current_share - baseline_share
+            if delta > threshold:
+                alerts.append(
+                    {

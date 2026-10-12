@@ -170,3 +170,31 @@ def main() -> None:
             print(json.dumps(result, indent=2, ensure_ascii=False))
         except Exception as exc:
             source_status = inspect_knowledge_sources(
+                EXISTING_WORKBOOK, STEP3_MD, STEP3_ACTION_PLAN, args.db
+            )
+            index_status = get_index_status(args.vector_store)
+            try:
+                index_error = json.loads(index_status.get("last_error") or "{}")
+            except (TypeError, ValueError):
+                index_error = {"detail": index_status.get("last_error")}
+            print(json.dumps({
+                "status": "failed",
+                "error": str(exc),
+                "sources": source_status,
+                "chunks_generated": source_status["total_chunks_generated"],
+                "failed_documents": index_error.get("failed_document_count", 0),
+                "not_persisted_documents": max(
+                    0, source_status["total_chunks_generated"] - index_status["chunk_count"]
+                ),
+                "index_error_details": index_error,
+                "knowledge_base": index_status,
+            }, indent=2, ensure_ascii=False))
+            raise SystemExit(1)
+    elif args.command == "ai-check":
+        result = LLMAssistant().test_connection()
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+        if not result["ready"]:
+            raise SystemExit(1)
+    elif args.command == "status":
+        conn = get_connection(args.db)
+        try:
