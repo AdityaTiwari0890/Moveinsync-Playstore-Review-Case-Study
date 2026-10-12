@@ -20,3 +20,14 @@ class RatingsWatchClassifier:
         if is_unclassified:
             themes = []
         return {
+            "themes": themes,
+            "classification_method": result.get("method", "Keyword-Rule-Based"),
+            "heuristic_confidence": result.get("heuristic_confidence", "None"),
+            "is_unclassified": is_unclassified,
+            "evidence": result.get("evidence", {}),
+        }
+
+    def classify_reviews(self, reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        out = []
+        for review in reviews:
+            text = review.get("review_text") or review.get("Review Text") or ""

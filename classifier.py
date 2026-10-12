@@ -153,3 +153,41 @@ class ReviewClassifier:
                 "audit_note": "Insufficient or missing review text; no defect invented.",
             }
 
+        text_lower = cleaned_text.lower()
+        matched_themes: List[str] = []
+        evidence_dict: Dict[str, List[str]] = {}
+        total_tokens = 0
+
+        # Evaluate the 10 specific functional themes first
+        for item in self.taxonomy:
+            theme_name = item["theme"]
+            if theme_name == "Other or unclear":
+                continue  # Handled as fallback
+
+            matched_tokens: List[str] = []
+            for pattern in item["patterns"]:
+                matches = re.findall(pattern, text_lower, re.IGNORECASE)
+                if matches:
+                    matched_tokens.extend([m.lower() for m in matches])
+
+            if matched_tokens:
+                # Remove duplicate tokens while preserving order
+                unique_tokens = list(dict.fromkeys(matched_tokens))
+                matched_themes.append(theme_name)
+                evidence_dict[theme_name] = unique_tokens
+                total_tokens += len(unique_tokens)
+
+        # If no specific functional theme matched
+        if not matched_themes:
+            # Check for generic complaint keywords
+            other_item = next((item for item in self.taxonomy if item["theme"] == "Other or unclear"), None)
+            matched_other_tokens = []
+            if other_item:
+                for pattern in other_item["patterns"]:
+                    matches = re.findall(pattern, text_lower, re.IGNORECASE)
+                    if matches:
+                        matched_other_tokens.extend([m.lower() for m in matches])
+
+            if matched_other_tokens:
+                unique_other = list(dict.fromkeys(matched_other_tokens))
+                return {

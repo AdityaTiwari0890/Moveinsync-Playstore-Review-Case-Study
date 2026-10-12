@@ -681,3 +681,117 @@ def enhance_workbook_with_analysis(
         ws_rt.append(row.tolist())
 
     # 1. Add BarChart for Star Rating Distribution (1★ to 5★)
+    chart_dist = BarChart()
+    chart_dist.type = "col"
+    chart_dist.style = 10
+    chart_dist.title = "Star Rating Distribution (Overall)"
+    chart_dist.y_axis.title = "Review Count"
+    chart_dist.x_axis.title = "Star Rating"
+    chart_dist.width = 15
+    chart_dist.height = 9
+
+    # Overall row is at row 3 (header is row 2), columns 6 to 10 are 1★ to 5★ Count
+    data_dist = Reference(ws_rt, min_col=6, min_row=2, max_col=10, max_row=3)
+    chart_dist.add_data(data_dist, titles_from_data=True, from_rows=True)
+    ws_rt.add_chart(chart_dist, "K2")
+
+    # 2. Add LineChart for Monthly Rating Trend if monthly data exists
+    if len(monthly_df) >= 1:
+        chart_line = LineChart()
+        chart_line.title = "Monthly Average Rating Trajectory"
+        chart_line.style = 13
+        chart_line.y_axis.title = "Average Rating (1-5★)"
+        chart_line.x_axis.title = "Year-Month"
+        chart_line.width = 15
+        chart_line.height = 9
+
+        data_ref = Reference(ws_rt, min_col=4, min_row=monthly_start_row, max_row=monthly_start_row + len(monthly_df))
+        cats_ref = Reference(ws_rt, min_col=1, min_row=monthly_start_row + 1, max_row=monthly_start_row + len(monthly_df))
+        chart_line.add_data(data_ref, titles_from_data=True)
+        chart_line.set_categories(cats_ref)
+        ws_rt.add_chart(chart_line, f"K{monthly_start_row}")
+
+    # -------------------------------------------------------------
+    # 2. Sheet: Theme_Analysis
+    # -------------------------------------------------------------
+    ws_ta = wb.create_sheet(title="Theme_Analysis")
+    ws_ta.append(theme_analysis_df.columns.tolist())
+    for _, row in theme_analysis_df.iterrows():
+        ws_ta.append(row.tolist())
+
+    # -------------------------------------------------------------
+    # 3. Sheet: Version_Analysis
+    # -------------------------------------------------------------
+    ws_va = wb.create_sheet(title="Version_Analysis")
+    ws_va.append(["SECTION 1: VERSION PERFORMANCE SUMMARY (N >= 15 for statistical reliability)"])
+    ws_va.cell(row=1, column=1).font = Font(name="Calibri", size=12, bold=True, color=WHITE_TEXT)
+    ws_va.cell(row=1, column=1).fill = section_fill
+
+    ws_va.append(version_df.columns.tolist())
+    for _, row in version_df.iterrows():
+        ws_va.append(row.tolist())
+
+    ws_va.append([])  # Spacer
+
+    r_idx = ws_va.max_row + 1
+    ws_va.cell(row=r_idx, column=1, value="SECTION 2: FLAGGED VERSION REGRESSIONS (Observational Associations)")
+    ws_va.cell(row=r_idx, column=1).font = Font(name="Calibri", size=12, bold=True, color=WHITE_TEXT)
+    ws_va.cell(row=r_idx, column=1).fill = section_fill
+
+    if len(regression_df) > 0:
+        ws_va.append(regression_df.columns.tolist())
+        for _, row in regression_df.iterrows():
+            ws_va.append(row.tolist())
+    else:
+        ws_va.append(["No version regressions detected exceeding thresholds (Delta Rating <= -0.30★ or Delta Neg Rate >= 15%)."])
+
+    # -------------------------------------------------------------
+    # 4. Sheet: Pareto_Analysis
+    # -------------------------------------------------------------
+    ws_pa = wb.create_sheet(title="Pareto_Analysis")
+    ws_pa.append(["NOTE: Percentages can overlap (sum > 100%) because individual reviews can receive multiple issue labels."])
+    ws_pa.cell(row=1, column=1).font = Font(name="Calibri", size=10, italic=True)
+
+    pareto_start_row = 2
+    ws_pa.append(pareto_df.columns.tolist())
+    for _, row in pareto_df.iterrows():
+        ws_pa.append(row.tolist())
+
+    # Add Pareto Bar Chart for Negative Reviews Count
+    if len(pareto_df) > 0:
+        chart_pareto = BarChart()
+        chart_pareto.type = "col"
+        chart_pareto.style = 10
+        chart_pareto.title = "Pareto Distribution of Negative Complaint Themes"
+        chart_pareto.y_axis.title = "Number of Negative Reviews"
+        chart_pareto.x_axis.title = "Complaint Theme"
+        chart_pareto.width = 18
+        chart_pareto.height = 11
+
+        data_p = Reference(ws_pa, min_col=2, min_row=pareto_start_row, max_row=pareto_start_row + len(pareto_df))
+        cats_p = Reference(ws_pa, min_col=1, min_row=pareto_start_row + 1, max_row=pareto_start_row + len(pareto_df))
+        chart_pareto.add_data(data_p, titles_from_data=True)
+        chart_pareto.set_categories(cats_p)
+        ws_pa.add_chart(chart_pareto, f"H{pareto_start_row + 1}")
+
+    # -------------------------------------------------------------
+    # 5. Sheet: Action_Priorities
+    # -------------------------------------------------------------
+    ws_ap = wb.create_sheet(title="Action_Priorities")
+    ws_ap.append(action_df.columns.tolist())
+    for _, row in action_df.iterrows():
+        ws_ap.append(row.tolist())
+
+    # -------------------------------------------------------------
+    # Post-Processing: Table Styling, Auto-Fit, Freezing
+    # -------------------------------------------------------------
+    tables_to_create = [
+        (ws_ta, "Table_Theme_Analysis", 1, len(theme_analysis_df) + 1),
+        (ws_pa, "Table_Pareto_Analysis", 2, len(pareto_df) + 2),
+        (ws_ap, "Table_Action_Priorities", 1, len(action_df) + 1),
+    ]
+
+    for ws, t_name, start_r, end_r in tables_to_create:
+        max_col = ws.max_column
+        ref = f"A{start_r}:{get_column_letter(max_col)}{end_r}"
+        tab = Table(displayName=t_name, ref=ref)
