@@ -191,3 +191,42 @@ class ReviewClassifier:
             if matched_other_tokens:
                 unique_other = list(dict.fromkeys(matched_other_tokens))
                 return {
+                    "themes": ["Other or unclear"],
+                    "method": "Keyword-Rule-Based",
+                    "evidence": {"Other or unclear": unique_other},
+                    "heuristic_confidence": "Medium",
+                    "is_unclassified": False,
+                    "audit_note": "Generic sentiment detected without specific defect details.",
+                }
+            else:
+                return {
+                    "themes": ["Unclassified"],
+                    "method": "Keyword-Rule-Based",
+                    "evidence": {},
+                    "heuristic_confidence": "None",
+                    "is_unclassified": True,
+                    "audit_note": "No matching taxonomy patterns found in text.",
+                }
+
+        # Calculate heuristic confidence (Note: heuristic score, NOT statistical probability)
+        # High: 3+ matched tokens or 2+ distinct specific categories
+        # Medium: 2 matched tokens
+        # Low: 1 matched token
+        if total_tokens >= 3 or len(matched_themes) >= 2:
+            confidence = "High"
+        elif total_tokens == 2:
+            confidence = "Medium"
+        else:
+            confidence = "Low"
+
+        return {
+            "themes": matched_themes,
+            "method": "Keyword-Rule-Based",
+            "evidence": evidence_dict,
+            "heuristic_confidence": confidence,
+            "is_unclassified": False,
+            "audit_note": f"Matched {len(matched_themes)} themes via {total_tokens} tokens.",
+        }
+
+
+def evaluate_classifier(

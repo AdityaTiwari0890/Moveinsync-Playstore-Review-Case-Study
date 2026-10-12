@@ -94,3 +94,19 @@ def get_negative_review_share(db_path: str, platform: str = "all", start_date: O
         query += " AND review_date <= ?"
         params.append(end_date)
     total_rows = conn.execute(query, params).fetchone()[0]
+    neg_rows = conn.execute(query.replace("SELECT COUNT(*)", "SELECT COUNT(*)") + " AND rating <= 2", params).fetchone()[0]
+    return round((neg_rows / total_rows) * 100, 2) if total_rows else 0.0
+
+
+def get_top_themes(db_path: str, platform: str = "all", limit: int = 5) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT assigned_themes FROM reviews WHERE assigned_themes IS NOT NULL AND assigned_themes != '[]'" + (" AND platform = ?" if platform != "all" else ""),
+        ([platform] if platform != "all" else [])
+    ).fetchall()
+    counts = Counter()
+    for row in rows:
+        try:
+            themes = __import__('json').loads(row[0])
+        except Exception:
+            themes = []

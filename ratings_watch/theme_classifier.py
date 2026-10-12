@@ -31,3 +31,14 @@ class RatingsWatchClassifier:
         out = []
         for review in reviews:
             text = review.get("review_text") or review.get("Review Text") or ""
+            rating = review.get("rating")
+            if rating is None:
+                rating = review.get("Rating")
+            item = self.classify(text, rating)
+            merged = dict(review)
+            merged["assigned_themes"] = item["themes"]
+            merged["classification_method"] = item["classification_method"]
+            merged["heuristic_confidence"] = item["heuristic_confidence"]
+            merged["is_unclassified"] = item["is_unclassified"]
+            out.append(merged)
+        return out

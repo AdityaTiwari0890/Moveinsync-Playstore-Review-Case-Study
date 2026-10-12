@@ -795,3 +795,117 @@ def enhance_workbook_with_analysis(
         max_col = ws.max_column
         ref = f"A{start_r}:{get_column_letter(max_col)}{end_r}"
         tab = Table(displayName=t_name, ref=ref)
+        tab.tableStyleInfo = TableStyleInfo(
+            name="TableStyleLight9", showFirstColumn=False, showLastColumn=False, showRowStripes=True, showColumnStripes=False
+        )
+        ws.add_table(tab)
+        ws.freeze_panes = f"A{start_r + 1}"
+
+    # Style cells across all analysis sheets
+    for ws in [ws_rt, ws_ta, ws_va, ws_pa, ws_ap]:
+        for row in ws.iter_rows():
+            for cell in row:
+                cell.font = regular_font
+                cell.border = thin_border
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+                # Style Section Header rows
+                if cell.value and isinstance(cell.value, str) and cell.value.startswith("SECTION "):
+                    cell.font = Font(name="Calibri", size=11, bold=True, color=WHITE_TEXT)
+                    cell.fill = section_fill
+                elif cell.row in (1, 2) and ws in (ws_ta, ws_pa, ws_ap):
+                    if cell.row == 1 and ws != ws_pa:
+                        cell.font = header_font
+                        cell.fill = header_fill
+                    elif cell.row == 2 and ws == ws_pa:
+                        cell.font = header_font
+                        cell.fill = header_fill
+
+        # Auto-adjust column widths
+        for col in ws.columns:
+            max_len = 0
+            col_letter = get_column_letter(col[0].column)
+            for cell in col:
+                if cell.value:
+                    val_str = str(cell.value)
+                    first_line = val_str.split("\n")[0]
+                    max_len = max(max_len, min(len(first_line), 80))
+            ws.column_dimensions[col_letter].width = max(12, min(max_len + 3, 65))
+
+    wb.save(output_filepath)
+    return output_filepath
+
+
+def generate_markdown_report(
+    overview_df: pd.DataFrame,
+    theme_analysis_df: pd.DataFrame,
+    pareto_df: pd.DataFrame,
+    version_df: pd.DataFrame,
+    regression_df: pd.DataFrame,
+    action_df: pd.DataFrame,
+    audit_meta: Dict[str, Any],
+    total_reviews: int,
+    total_negative_reviews: int,
+    output_path: str = "MOVEIN_SYNC_ANALYSIS_REPORT.md",
+) -> str:
+    """
+    Generate an executive-ready Markdown analysis report based on real workbook findings.
+    """
+    ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # Extract overall metrics
+    overall_row = overview_df[overview_df["Sub-Segment"] == "All Combined Reviews"].iloc[0]
+    avg_rating = overall_row["Sample Avg Rating"]
+    neg_rate = overall_row["Negative Rate %"]
+    ci_l = overall_row["Wilson 95% CI Lower"]
+    ci_u = overall_row["Wilson 95% CI Upper"]
+
+    # Extract role metrics
+    emp_row = overview_df[overview_df["Sub-Segment"] == "Employee Apps"]
+    drv_row = overview_df[overview_df["Sub-Segment"] == "Driver Apps"]
+    and_row = overview_df[overview_df["Sub-Segment"] == "Android"]
+    ios_row = overview_df[overview_df["Sub-Segment"] == "iOS"]
+
+    emp_rating = emp_row["Sample Avg Rating"].values[0] if len(emp_row) > 0 else "N/A"
+    emp_neg = emp_row["Negative Rate %"].values[0] if len(emp_row) > 0 else "N/A"
+    drv_rating = drv_row["Sample Avg Rating"].values[0] if len(drv_row) > 0 else "N/A"
+    drv_neg = drv_row["Negative Rate %"].values[0] if len(drv_row) > 0 else "N/A"
+
+    and_rating = and_row["Sample Avg Rating"].values[0] if len(and_row) > 0 else "N/A"
+    and_neg = and_row["Negative Rate %"].values[0] if len(and_row) > 0 else "N/A"
+    ios_rating = ios_row["Sample Avg Rating"].values[0] if len(ios_row) > 0 else "N/A"
+    ios_neg = ios_row["Negative Rate %"].values[0] if len(ios_row) > 0 else "N/A"
+
+    # Pareto vital few
+    vital_themes = pareto_df[pareto_df["Pareto Classification"].str.contains("Vital Few")]
+
+    report_content = f"""# MOVEIN SYNC App Review Intelligence & Rating Analysis Report
+
+**Executive Intelligence Report**  
+*Generated on:* {ts}  
+*Dataset Evaluated:* `{os.path.basename(audit_meta['input_filepath'])}`  
+*Total Scraped Reviews Analyzed:* **{total_reviews:,}** | *Negative Reviews (1★ & 2★):* **{total_negative_reviews:,}**
+
+---
+
+## 1. Executive Summary & Key Rating Findings
+
+An end-to-end evaluation was conducted on **{total_reviews:,} customer reviews** across MOVEIN SYNC mobile applications (including the corporate employee commute app and driver partner applications).
+
+* **Sample Average Rating:** **{avg_rating} / 5.00 Stars**
+* **Negative Review Proportion (1★ + 2★):** **{neg_rate}%** (Wilson 95% Confidence Interval: **[{ci_l}%, {ci_u}%]**)
+* **Positive Review Proportion (4★ + 5★):** **{overall_row['Positive Rate % (4★+5★)']}%**
+* **Rating Distribution:**
+  - **1 Star:** {overall_row['1★ Count']} ({overall_row['1★ %']}%)
+  - **2 Stars:** {overall_row['2★ Count']} ({overall_row['2★ %']}%)
+  - **3 Stars:** {overall_row['3★ Count']} ({overall_row['3★ %']}%)
+  - **4 Stars:** {overall_row['4★ Count']} ({overall_row['4★ %']}%)
+  - **5 Stars:** {overall_row['5★ Count']} ({overall_row['5★ %']}%)
+
+> [!NOTE]
+> All averages and percentages reported are sample statistics derived from collected store reviews and do not represent a census of all lifetime store ratings.
+
+---
+
+## 2. Most Common Negative Themes & Pareto 80/20 Analysis
+
