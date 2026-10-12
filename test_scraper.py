@@ -93,3 +93,26 @@ class TestAppReviewIntelligenceScraper(unittest.TestCase):
         self.assertIsNotNone(meta_android["store_rating"])
         self.assertIn("limitation_note", meta_android)
 
+        meta_ios = get_app_store_metadata("962949521")
+        self.assertEqual(meta_ios["status"], "SUCCESS")
+        self.assertIn("MoveInSync", meta_ios["title"])
+        self.assertIsNotNone(meta_ios["store_rating"])
+
+    def test_05_business_analysis(self):
+        """Verify business intelligence calculations and theme extraction."""
+        sample_reviews = [
+            {"rating": 1, "review_title": "Bad app", "review_text": "Frequent crash and login otp error", "review_date": "2026-10-10 10:00:00", "app_role": "employee", "platform": "Android", "review_id": "r1"},
+            {"rating": 1, "review_title": "Worst", "review_text": "Late cab delay and wrong gps location", "review_date": "2026-10-09 10:00:00", "app_role": "employee", "platform": "Android", "review_id": "r2"},
+            {"rating": 2, "review_title": "Slow", "review_text": "Battery drain and slow ui glitch", "review_date": "2026-09-15 10:00:00", "app_role": "driver", "platform": "Android", "review_id": "r3"},
+            {"rating": 5, "review_title": "Great", "review_text": "Very smooth commute and punctual on time", "review_date": "2026-09-10 10:00:00", "app_role": "employee", "platform": "iOS", "review_id": "r4"},
+            {"rating": 5, "review_title": "Love it", "review_text": "Easy to use clean ui and safe", "review_date": "2026-08-01 10:00:00", "app_role": "competitor", "platform": "iOS", "review_id": "r5"},
+        ]
+        summary = calculate_sample_summary(sample_reviews, requested_count=5)
+        self.assertEqual(summary["total_reviews"], 5)
+        self.assertEqual(summary["target_reached"], "Yes")
+        self.assertEqual(summary["avg_rating"], 2.8)
+        self.assertEqual(summary["star_1_count"], 2)
+        self.assertEqual(summary["negative_pct"], 60.0)
+        self.assertEqual(summary["positive_pct"], 40.0)
+
+        # Monthly trends

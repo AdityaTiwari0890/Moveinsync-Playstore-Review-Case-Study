@@ -161,3 +161,57 @@ def scrape_app_store_reviews(
     log("INFO", f"Starting Apple App Store scrape for '{app_name}' (ID: {clean_id}), target: {count} reviews.")
 
     reached_date_boundary = False
+
+    # Primary Collection: Apple Official Customer Reviews RSS Feed (Pages 1 to 10)
+    browser_headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+
+    for page in range(1, 11):
+        if len(collected_reviews) >= count or reached_date_boundary:
+            break
+
+        parsed_items = []
+        urls_to_try = [
+            f"https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={clean_id}/sortBy=mostRecent/json",
+            f"https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={clean_id}/json",
+            f"https://itunes.apple.com/{country}/rss/customerreviews/id={clean_id}/sortBy=mostRecent/json" if page == 1 else None,
+            f"https://itunes.apple.com/{country}/rss/customerreviews/id={clean_id}/json" if page == 1 else None,
+            f"https://itunes.apple.com/{country}/rss/customerreviews/page={page}/id={clean_id}/sortby=mostrecent/xml",
+        ]
+
+        for url in urls_to_try:
+            if not url:
+                continue
+            try:
+                resp = requests.get(url, headers=browser_headers, timeout=8)
+                if resp.status_code == 200:
+                    if "json" in url:
+                        parsed_items = _parse_itunes_json_page(resp.json())
+                    else:
+                        parsed_items = _parse_itunes_xml_page(resp.content)
+                    if parsed_items:
+                        break
+            except Exception:
+                continue
+
+        if not parsed_items:
+            # Do not break early; Apple's RSS feed has non-contiguous cached pages
+            continue
+
+        new_on_page = 0
+        for item in parsed_items:
+            raw_updated = item.get("updated")
+            review_date_val = None
+            review_dt_str = None
+
+            if raw_updated:
+                try:
+                    dt = datetime.datetime.fromisoformat(raw_updated.replace("Z", "+00:00"))
+                    review_date_val = dt.date()
+                    review_dt_str = dt.strftime("%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    review_dt_str = str(raw_updated)[:19].replace("T", " ")
+                    try:
+                        review_date_val = datetime.date.fromisoformat(review_dt_str[:10])
+                    except Exception:

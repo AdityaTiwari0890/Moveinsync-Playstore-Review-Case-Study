@@ -153,3 +153,25 @@ def scrape_play_store_reviews(
             if review_date_val and end_date and review_date_val > end_date:
                 continue  # Skip reviews newer than end_date
 
+            if review_date_val and start_date and review_date_val < start_date:
+                # Because Sort.NEWEST returns newest first, reaching an older review signals boundary
+                reached_date_boundary = True
+                break
+
+            # Deduplication
+            r_id = item.get("reviewId")
+            if not r_id:
+                # Fallback deterministic hash
+                hash_seed = f"{item.get('userName')}_{review_dt_str}_{item.get('content', '')[:50]}"
+                r_id = f"fallback_{hashlib.md5(hash_seed.encode('utf-8', errors='ignore')).hexdigest()}"
+
+            if r_id in seen_ids:
+                continue
+
+            seen_ids.add(r_id)
+            new_items_in_batch += 1
+
+            # Format Developer Reply Date
+            rep_dt = item.get("repliedAt")
+            rep_dt_str = None
+            if isinstance(rep_dt, datetime.datetime):

@@ -12,3 +12,18 @@ class BaseReviewSource(ABC):
 
 class GooglePlaySource(BaseReviewSource):
     """Adapter over the project's existing paginated Google Play collector."""
+
+    def __init__(self) -> None:
+        self.had_errors = False
+
+    def fetch_reviews(self, app_id: str, app_name: str, app_role: str, count: int, **kwargs) -> List[Dict[str, Any]]:
+        from play_store_scraper import scrape_play_store_reviews
+
+        def capture(level: str, _message: str) -> None:
+            if level.upper() == "ERROR":
+                self.had_errors = True
+
+        results = scrape_play_store_reviews(
+            package_id=app_id,
+            app_name=app_name,
+            app_role=app_role,
