@@ -4,6 +4,9 @@ An enterprise-ready Python solution to scrape, analyze, and benchmark mobile app
 
 > Review datasets, SQLite databases, and generated reports are intentionally excluded from this repository because they can contain reviewer identifiers and verbatim customer comments. Provide the source workbooks locally when running the analysis.
 
+Report - https://drive.google.com/file/d/10fzLKUOrdGiXHgQp12I6hxeaHLjaURKM/view?usp=sharing
+Reviews with analysis - https://docs.google.com/spreadsheets/d/1kIvhi35SveEbQI1DqjfE51ZOhAOuPTZG/edit?usp=sharing&ouid=118233679977606631667&rtpof=true&sd=true
+Case Study resources - https://drive.google.com/drive/folders/1zPzSy4mqzQubb9BnXEfaz8cA5fHsMNE2?usp=sharing
 ---
 
 ## Key Features
@@ -409,3 +412,5 @@ python test_analysis_engine.py
 - SQLite cosine ranking is intended for this local-scale corpus. It loads candidate vectors into process memory for ranking and is not a multi-user or large-corpus vector database.
 - Semantic retrieval quality and hosted-model behavior still require the operator's real Ollama model/endpoint. Automated RAG tests use deterministic mocked embeddings/chat and do not claim hosted service connectivity.
 - Current source platform data covers MoveInSync employee and driver variants in the workbook; the registry discovers those real IDs. Additional products are supported by adding/importing their verified identifiers and records.
+
+
