@@ -142,6 +142,36 @@ class Step4Tests(unittest.TestCase):
             log_callback=ANY,
         )
 
+    def test_imported_reviews_flow_into_rating_analysis(self):
+        workbook = os.path.join(self.tempdir.name, "analysis-input.xlsx")
+        pd.DataFrame(
+            [
+                {
+                    "App Name": "MoveInSync",
+                    "Platform": "Android",
+                    "Review ID": "sample-positive",
+                    "Rating": 5,
+                    "Review Text": "Sample positive review",
+                    "Review Date": "2026-10-10",
+                },
+                {
+                    "App Name": "MoveInSync",
+                    "Platform": "Android",
+                    "Review ID": "sample-negative",
+                    "Rating": 1,
+                    "Review Text": "Sample negative review",
+                    "Review Date": "2026-10-11",
+                },
+            ]
+        ).to_excel(workbook, sheet_name="Combined_Reviews", index=False)
+
+        imported = import_existing_workbook(workbook, self.db_path)
+        summary = get_rating_summary(self.db_path, platform="Android")
+
+        self.assertEqual(imported["inserted"], 2)
+        self.assertEqual(summary["total_reviews"], 2)
+        self.assertEqual(summary["average_rating"], 3.0)
+
 
 if __name__ == "__main__":
     unittest.main()
