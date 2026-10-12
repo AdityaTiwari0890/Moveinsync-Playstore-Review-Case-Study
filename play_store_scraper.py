@@ -197,3 +197,26 @@ def scrape_play_store_reviews(
                 "collection_timestamp": collection_ts,
                 "source_url": source_url,
             }
+            collected_reviews.append(standardized_review)
+
+            if len(collected_reviews) >= count:
+                break
+
+        log("INFO", f"Retrieved batch: {len(batch_result)} raw reviews, {new_items_in_batch} added. Total: {len(collected_reviews)}/{count}.")
+
+        if not next_token or next_token == continuation_token:
+            log("INFO", "Google Play continuation token exhausted.")
+            break
+
+        continuation_token = next_token
+        # Rate-limiting courtesy pause
+        time.sleep(0.5)
+
+    # Sort final list newest first
+    collected_reviews.sort(
+        key=lambda r: r.get("review_date") or "",
+        reverse=True
+    )
+
+    log("SUCCESS", f"Finished Google Play scrape for '{app_name}'. Total reviews collected: {len(collected_reviews)}.")
+    return collected_reviews

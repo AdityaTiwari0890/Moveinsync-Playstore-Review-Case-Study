@@ -140,3 +140,27 @@ class TestAppReviewIntelligenceScraper(unittest.TestCase):
         mock_android = [{
             "app_name": "MoveInSync", "store_id": "com.moveinsync.ets", "platform": "Android",
             "app_role": "employee", "review_id": "rev_and_1", "reviewer_name": "John Doe",
+            "rating": 5, "review_text": "Excellent commute service", "review_date": "2026-10-12 12:00:00",
+            "app_version": "12.0.0", "developer_reply": None, "developer_reply_date": None,
+            "helpful_votes": 3, "collection_timestamp": "2026-10-12 12:05:00",
+            "source_url": "https://play.google.com/store/apps/details?id=com.moveinsync.ets"
+        }]
+        mock_ios = [{
+            "app_name": "MoveInSync", "store_id": "962949521", "platform": "iOS",
+            "app_role": "employee", "review_id": "rev_ios_1", "reviewer_name": "Jane Doe",
+            "rating": 4, "review_title": "Good app", "review_text": "Reliable routing",
+            "review_date": "2026-10-11 10:00:00", "app_version": "5.4.1",
+            "developer_reply": None, "developer_reply_date": None, "helpful_votes": 1,
+            "collection_timestamp": "2026-10-12 12:05:00", "source_url": "https://apps.apple.com/app/id962949521"
+        }]
+        mock_combined = mock_android + mock_ios
+        mock_meta = [get_play_store_metadata("com.moveinsync.ets")]
+        mock_sm = [calculate_sample_summary(mock_android, 100)]
+        mock_sm[0].update({"app_name": "MoveInSync", "platform": "Android", "app_role": "employee"})
+        mock_mt = calculate_monthly_trends(mock_combined)
+        mock_sc = calculate_segment_comparisons(mock_combined)
+        mock_th = extract_issue_themes(mock_combined)
+        mock_logs = [{
+            "timestamp": "2026-10-12 12:00:00", "app_name": "MoveInSync", "platform": "Android",
+            "store_id": "com.moveinsync.ets", "status": "SUCCESS", "requested_count": 100,
+            "retrieved_count": 1, "data_source": "google-play-scraper",

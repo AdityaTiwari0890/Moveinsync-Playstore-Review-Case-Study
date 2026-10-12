@@ -269,3 +269,58 @@ def scrape_app_store_reviews(
             serp_url = "https://serpapi.com/search.json"
             serp_params = {
                 "engine": "apple_reviews",
+                "app_id": clean_id,
+                "country": country,
+                "api_key": serpapi_key,
+                "sort": "mostrecent",
+            }
+            resp = requests.get(serp_url, params=serp_params, timeout=15)
+            if resp.status_code == 200:
+                s_data = resp.json()
+                s_reviews = s_data.get("reviews", [])
+                for sr in s_reviews:
+                    sr_id = str(sr.get("id") or "")
+                    if not sr_id or sr_id in seen_ids:
+                        continue
+                    seen_ids.add(sr_id)
+
+                    s_dt_str = sr.get("date")
+                    collected_reviews.append({
+                        "app_name": app_name,
+                        "store_id": clean_id,
+                        "platform": "iOS",
+                        "app_role": app_role,
+                        "review_id": sr_id,
+                        "reviewer_name": sr.get("user", {}).get("name", "Anonymous"),
+                        "rating": int(sr.get("rating", 0)),
+                        "review_title": sr.get("title"),
+                        "review_text": sr.get("text", ""),
+                        "review_date": s_dt_str,
+                        "app_version": sr.get("version"),
+                        "developer_reply": sr.get("developer_response", {}).get("text"),
+                        "developer_reply_date": sr.get("developer_response", {}).get("date"),
+                        "helpful_votes": 0,
+                        "collection_timestamp": collection_ts,
+                        "source_url": source_url,
+                    })
+                    if len(collected_reviews) >= count:
+                        break
+        except Exception as exc:
+            log("WARNING", f"SerpApi query encountered an error: {exc}")
+
+    # Cap report limitation
+    if len(collected_reviews) < count:
+        log("WARNING", (
+            f"Apple App Store data source returned {len(collected_reviews)} reviews "
+            f"(target: {count}). Note: Apple's public RSS customer-review feed caps results "
+            f"at up to 500 reviews per country."
+        ))
+
+    # Sort final list newest first
+    collected_reviews.sort(
+        key=lambda r: r.get("review_date") or "",
+        reverse=True
+    )
+
+    log("SUCCESS", f"Finished iOS scrape for '{app_name}'. Total reviews collected: {len(collected_reviews)}.")
+    return collected_reviews

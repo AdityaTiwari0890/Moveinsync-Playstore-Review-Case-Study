@@ -27,3 +27,18 @@ class GooglePlaySource(BaseReviewSource):
             package_id=app_id,
             app_name=app_name,
             app_role=app_role,
+            count=count,
+            country=kwargs.get("country", "in"),
+            lang=kwargs.get("lang", "en"),
+            log_callback=capture,
+        )
+        return results
+
+
+class AppleAppSource(BaseReviewSource):
+    """Adapter over Apple's public customer-review RSS collection already used by Step 1."""
+
+    def __init__(self) -> None:
+        self.had_errors = False
+
+    def fetch_reviews(self, app_id: str, app_name: str, app_role: str, count: int, **kwargs) -> List[Dict[str, Any]]:
