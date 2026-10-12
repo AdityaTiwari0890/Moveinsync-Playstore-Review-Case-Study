@@ -53,3 +53,59 @@ def _document(document_id: str, content: str, metadata: Dict[str, Any]) -> Dict[
         "content_hash": _digest(normalized + json.dumps(metadata, sort_keys=True, default=str)),
         "metadata": metadata,
     }
+
+
+def _add_chunked_document(
+    documents: Dict[str, Dict[str, Any]],
+    document_id: str,
+    content: str,
+    metadata: Dict[str, Any],
+) -> None:
+    chunks = _split_text(content)
+    for index, chunk in enumerate(chunks, start=1):
+        chunk_id = document_id if len(chunks) == 1 else f"{document_id}:chunk:{index}"
+        chunk_metadata = {
+            **metadata,
+            "parent_document_id": document_id,
+            "chunk_index": index,
+            "chunk_count": len(chunks),
+        }
+        documents[chunk_id] = _document(chunk_id, chunk, chunk_metadata)
+
+
+def _split_text(text: str) -> List[str]:
+    paragraphs = [part.strip() for part in text.split("\n") if part.strip()]
+    chunks: List[str] = []
+    current = ""
+    for paragraph in paragraphs:
+        while len(paragraph) > _CHUNK_SIZE:
+            if current:
+                chunks.append(current)
+                current = ""
+            chunks.append(paragraph[:_CHUNK_SIZE])
+            paragraph = paragraph[_CHUNK_SIZE - _CHUNK_OVERLAP :]
+        if len(current) + len(paragraph) + 1 > _CHUNK_SIZE and current:
+            chunks.append(current)
+            current = current[-_CHUNK_OVERLAP :] + "\n" + paragraph
+        else:
+            current = f"{current}\n{paragraph}".strip()
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def discover_documents(
+    workbook_path: str = EXISTING_WORKBOOK,
+    step3_md_path: str = STEP3_MD,
+    action_plan_path: str = STEP3_ACTION_PLAN,
+    db_path: str = DB_PATH,
+) -> List[Dict[str, Any]]:
+    documents: Dict[str, Dict[str, Any]] = {}
+    workbook = resolve_project_path(workbook_path)
+    step3_md = resolve_project_path(step3_md_path)
+    action_plan = resolve_project_path(action_plan_path)
+    database = resolve_project_path(db_path)
+    classifier = RatingsWatchClassifier()
+    if workbook.exists():
+        with pd.ExcelFile(workbook) as excel:
+            for sheet in excel.sheet_names:
