@@ -77,3 +77,23 @@ def _priority_matrix_rows(path: Path) -> List[Dict[str, Any]]:
                         "original_row": {
                             key: (None if _clean(value) is None else str(value))
                             for key, value in record.items()
+                        },
+                    }
+                )
+    return rows
+
+
+def load_step3_recommendations(md_path: str, xlsx_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    items = parse_step3_markdown(md_path) if md_path else []
+    if xlsx_path and Path(xlsx_path).exists():
+        items.extend(_priority_matrix_rows(Path(xlsx_path)))
+    return items
+
+
+def import_step3_actions(md_path: str, xlsx_path: Optional[str] = None, db_path: str = "ratings_watch.db") -> int:
+    inserted = 0
+    for item in load_step3_recommendations(md_path, xlsx_path):
+        if item.get("theme"):
+            if upsert_action_item(item, db_path=db_path) == "inserted":
+                inserted += 1
+    return inserted

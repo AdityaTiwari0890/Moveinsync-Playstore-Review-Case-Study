@@ -481,3 +481,57 @@ def upsert_action_item(item: Dict[str, Any], db_path: str = DB_PATH) -> str:
             """INSERT INTO action_items
                (source, priority, theme, category, owner_team, effort_estimate,
                 success_metric, status, status_updated_at, notes, original_row_json)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+            (item.get("source", "step3_xlsx"), item.get("priority"), item.get("theme"),
+             item.get("category"), item.get("owner_team"), item.get("effort_estimate"),
+             item.get("success_metric"), item.get("status", "Open"),
+             now, item.get("notes"), json.dumps(item.get("original_row", {}))),
+        )
+        return "inserted"
+
+
+def update_action_status(item_id: int, status: str, notes: Optional[str] = None,
+                          db_path: str = DB_PATH) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE action_items SET status=?, status_updated_at=?, notes=? WHERE id=?",
+            (status, now, notes, item_id),
+        )
+
+
+# ── App config ───────────────────────────────────────────────────────────────
+
+def set_config(key: str, value: str, db_path: str = DB_PATH) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO app_config (key, value, updated_at) VALUES (?,?,?)",
+            (key, value, now),
+        )
+
+
+def get_config(key: str, default: Optional[str] = None, db_path: str = DB_PATH) -> Optional[str]:
+    conn = get_connection(db_path)
+    row = conn.execute("SELECT value FROM app_config WHERE key=?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+class DatabaseManager:
+    def __init__(self, db_path: str = DB_PATH):
+        self.db_path = db_path
+
+    def init_db(self):
+        init_db(self.db_path)
+
+    def upsert_review(self, review: Dict[str, Any], run_id: Optional[int] = None, is_imported: bool = False):
+        return upsert_review(review, run_id=run_id, is_imported=is_imported, db_path=self.db_path)
+
+    def bulk_upsert_reviews(self, reviews: List[Dict[str, Any]], run_id: Optional[int] = None, is_imported: bool = False):
+        return bulk_upsert_reviews(reviews, run_id=run_id, is_imported=is_imported, db_path=self.db_path)
+
+    def save_rating_snapshot(self, *args, **kwargs):
+        return save_rating_snapshot(*args, db_path=self.db_path, **kwargs)
+
+    def get_config(self, key: str, default: Optional[str] = None):
+        return get_config(key, default=default, db_path=self.db_path)

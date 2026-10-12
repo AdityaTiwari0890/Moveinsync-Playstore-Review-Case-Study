@@ -198,3 +198,32 @@ def evaluate_theme_spike(
                         {
                             "alert_type": "theme_spike",
                             "platform": platform,
+                            "theme": theme,
+                            "baseline_value": round(baseline_share, 2),
+                            "current_value": round(current_share, 2),
+                            "threshold": threshold,
+                            "severity": "high" if delta > threshold * 1.5 else "medium",
+                            "supporting_ids": current_ids[:20],
+                            "suggested_action": f"Investigate the change in negative-review share mentioning '{theme}' across equivalent seven-day windows.",
+                            "alert_key": f"theme_spike:{platform}:{theme}",
+                            "cooldown_until": _cooldown_until(),
+                        }
+                    )
+        return alerts
+    finally:
+        conn.close()
+
+
+def collect_alerts(db_path: str) -> List[Dict[str, Any]]:
+    candidates = (
+        evaluate_rating_drop(db_path)
+        + evaluate_negative_share_spike(db_path)
+        + evaluate_one_star_spike(db_path)
+        + evaluate_theme_spike(db_path)
+    )
+    detected = []
+    for alert in candidates:
+        result = upsert_alert(alert, db_path=db_path)
+        if result == "inserted":
+            detected.append(alert)
+    return detected

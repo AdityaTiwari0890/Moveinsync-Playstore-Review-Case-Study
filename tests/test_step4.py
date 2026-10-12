@@ -96,3 +96,27 @@ class Step4Tests(unittest.TestCase):
         self.assertTrue(result["is_unclassified"])
 
     def test_collection_does_not_record_fake_store_rating_snapshot(self):
+        with patch("ratings_watch.collection_service.GooglePlaySource.fetch_reviews") as fetch, patch(
+            "metadata.get_play_store_metadata",
+            return_value={"status": "ERROR", "limitation_note": "offline"},
+        ):
+            fetch.return_value = [
+                {
+                    "review_id": "live-id",
+                    "platform": "Android",
+                    "rating": 4,
+                    "review_text": "Works",
+                    "review_date": "2026-10-10",
+                }
+            ]
+            result = CollectionService(self.db_path).collect_platform(
+                "android", "verified-package", app_name="MoveInSync", count=1
+            )
+        self.assertEqual(result["status"], "success")
+        conn = sqlite3.connect(self.db_path)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM rating_snapshots").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM reviews WHERE review_id='live-id'").fetchone()[0], 1)
+            self.assertEqual(
+                conn.execute("SELECT is_unclassified FROM reviews WHERE review_id='live-id'").fetchone()[0],
+                1,

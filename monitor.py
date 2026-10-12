@@ -256,3 +256,32 @@ def main() -> None:
             app_id,
             app_name,
             args.count,
+            args.db,
+            app_role=args.app_role,
+        )
+        alerts = check_alerts(args.db)
+        try:
+            index = index_knowledge_base(
+                workbook_path=EXISTING_WORKBOOK,
+                step3_md_path=STEP3_MD,
+                action_plan_path=STEP3_ACTION_PLAN,
+                db_path=args.db,
+                vector_path=args.vector_store,
+            )
+        except Exception as exc:
+            index = {"status": "unavailable", "message": str(exc)}
+        overall = "success" if collection.get("status") == "success" and index.get("status") == "indexed" else "partial"
+        print(
+            json.dumps(
+                {"status": overall, "collection": collection, "alerts_evaluated": len(alerts), "knowledge_base": index},
+                indent=2,
+                ensure_ascii=False,
+            )
+        )
+    elif args.command == "import-step3":
+        result = import_step3_actions(STEP3_MD, STEP3_ACTION_PLAN, args.db)
+        print(json.dumps({"inserted_actions": result}, indent=2))
+
+
+if __name__ == "__main__":
+    main()
