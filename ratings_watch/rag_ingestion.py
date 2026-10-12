@@ -500,3 +500,59 @@ def index_knowledge_base(
                 f"{len(missing_after_write)} expected document(s) are missing or stale."
             )
         index_status = get_index_status(vector_path, pending_count=0)
+        if index_status.get("store_error"):
+            raise RuntimeError(index_status["store_error"])
+        if index_status["persisted_vector_count"] != len(documents):
+            raise RuntimeError("Persistent index verification failed: some documents have no valid stored vectors.")
+        clear_index_error(vector_path)
+        index_status = get_index_status(vector_path, pending_count=0)
+        return {
+            "status": "indexed",
+            "sources": source_status,
+            "discovered_documents": source_status["total_documents_generated"],
+            "review_documents": source_status["review_documents"],
+            "analysis_documents": source_status["analysis_documents"],
+            "recommendation_documents": source_status["recommendation_documents"],
+            "report_documents": source_status["report_documents"],
+            "chunks_generated": len(documents),
+            "updated": len(to_embed),
+            "updated_chunks": len(to_embed),
+            "unchanged": 0 if rebuild else len(documents) - len(pending),
+            "persisted_vectors": index_status["persisted_vector_count"],
+            "failed_documents": 0,
+            "failed_source_records": source_status["invalid_review_source_rows"],
+            "source_errors": source_status["errors"],
+            "missing_sources": source_status["missing_sources"],
+            "index": index_status,
+        }
+    except Exception as exc:
+        record_index_error(
+            vector_path,
+            json.dumps(
+                {
+                    "error": str(exc),
+                    "failed_document_count": len(failed_document_ids),
+                    "failed_document_ids": failed_document_ids[:20],
+                    "not_persisted_document_count": len(to_embed),
+                },
+                ensure_ascii=False,
+            ),
+        )
+        raise
+
+
+def count_pending_documents(
+    workbook_path: str = EXISTING_WORKBOOK,
+    step3_md_path: str = STEP3_MD,
+    action_plan_path: str = STEP3_ACTION_PLAN,
+    db_path: str = DB_PATH,
+    vector_path: str = VECTOR_STORE_PATH,
+) -> int:
+    workbook_path = str(resolve_project_path(workbook_path))
+    step3_md_path = str(resolve_project_path(step3_md_path))
+    action_plan_path = str(resolve_project_path(action_plan_path))
+    db_path = str(resolve_project_path(db_path))
+    vector_path = str(resolve_project_path(vector_path))
+    indexed = get_document_hashes(vector_path)
+    discovered = discover_documents(workbook_path, step3_md_path, action_plan_path, db_path)
+    return sum(indexed.get(doc["document_id"]) != doc["content_hash"] for doc in discovered)

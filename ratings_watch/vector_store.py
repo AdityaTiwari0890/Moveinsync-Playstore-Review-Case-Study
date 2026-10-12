@@ -251,3 +251,46 @@ def search_documents(
     if not query_norm:
         return []
     matches = []
+    for row in rows:
+        metadata = json.loads(row["metadata_json"])
+        excluded = False
+        for key, value in filters.items():
+            if value is None:
+                continue
+            if key == "date_after" and (not metadata.get("review_date") or metadata["review_date"] < value):
+                excluded = True
+            elif key == "date_before" and (not metadata.get("review_date") or metadata["review_date"] > value):
+                excluded = True
+            elif key == "theme" and value not in (metadata.get("themes") or []):
+                excluded = True
+            elif key not in {"date_after", "date_before", "theme"} and metadata.get(key) != value:
+                excluded = True
+        if excluded:
+            continue
+        embedding = json.loads(row["embedding_json"])
+        if len(embedding) != len(query_embedding):
+            continue
+        denominator = query_norm * (sum(value * value for value in embedding) ** 0.5)
+        score = sum(left * right for left, right in zip(query_embedding, embedding)) / denominator if denominator else 0.0
+        matches.append(
+            {
+                "document_id": row["document_id"],
+                "content": row["content"],
+                "metadata": metadata,
+                "score": score,
+            }
+        )
+    matches.sort(key=lambda item: item["score"], reverse=True)
+    selected = []
+    seen_reviews = set()
+    for item in matches:
+        metadata = item["metadata"]
+        if metadata.get("source_type") == "review":
+            review_key = (metadata.get("platform"), metadata.get("review_id"))
+            if review_key in seen_reviews:
+                continue
+            seen_reviews.add(review_key)
+        selected.append(item)
+        if len(selected) >= limit:
+            break
+    return selected
