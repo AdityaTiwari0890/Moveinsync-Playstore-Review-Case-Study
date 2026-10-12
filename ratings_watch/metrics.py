@@ -62,3 +62,19 @@ def get_rating_trend(db_path: str, platform: str = "all", days: int = 30) -> Lis
     params.append(days)
     rows = conn.execute(query, params).fetchall()
     return [
+        {"date": row[0], "avg_rating": round(_safe_float(row[1], 0), 2), "review_count": row[2]}
+        for row in rows
+    ][::-1]
+
+
+def get_review_counts(db_path: str, platform: str = "all") -> Dict[str, int]:
+    conn = sqlite3.connect(db_path)
+    query = "SELECT platform, COUNT(*) FROM reviews"
+    if platform != "all":
+        query = "SELECT platform, COUNT(*) FROM reviews WHERE platform = ?"
+        params = [platform]
+    else:
+        params = []
+    rows = conn.execute(query, params).fetchall()
+    total = sum(int(r[1]) for r in rows)
+    return {"total": total, "by_platform": {r[0]: int(r[1]) for r in rows}}

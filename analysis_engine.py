@@ -453,3 +453,117 @@ def compute_version_analysis(
             "Latest Review Date": latest_date,
             "Top Complaint Themes": top_themes,
         })
+
+    v_df = pd.DataFrame(version_groups).sort_values(
+        ["App Name", "Platform", "Sample Size (N)"], ascending=[True, True, False]
+    ).reset_index(drop=True)
+
+    # Detect Sequential Regressions for versions with sufficient sample size
+    for (app, plat), app_v_df in v_df.groupby(["App Name", "Platform"]):
+        # Filter out 'Unknown / Not Specified' and sort by Earliest Review Date
+        clean_v_df = app_v_df[app_v_df["App Version"] != "Unknown / Not Specified"].sort_values("Earliest Review Date").reset_index(drop=True)
+
+        if len(clean_v_df) >= 2:
+            for i in range(1, len(clean_v_df)):
+                prev = clean_v_df.iloc[i - 1]
+                curr = clean_v_df.iloc[i]
+
+                # Check sample thresholds
+                if prev["Sample Size (N)"] >= min_sample and curr["Sample Size (N)"] >= min_sample:
+                    delta_r = round(curr["Average Rating"] - prev["Average Rating"], 2)
+                    delta_neg = round(curr["Negative Rate %"] - prev["Negative Rate %"], 1)
+
+                    if delta_r <= -rating_drop_threshold or delta_neg >= neg_jump_threshold:
+                        # Extract sample negative quotes from current version
+                        curr_ver_str = curr["App Version"]
+                        curr_revs = df[(df["app_name"] == app) & (df["platform"] == plat) & (df["app_version_clean"] == curr_ver_str) & (df["rating"].isin([1, 2]))]
+                        quotes = []
+                        for _, q_row in curr_revs.head(3).iterrows():
+                            txt = str(q_row.get("review_text", "")).replace("\n", " ").strip()
+                            if len(txt) > 90:
+                                txt = txt[:87] + "..."
+                            quotes.append(f'[{str(q_row.get("review_id", ""))[:8]}]: "{txt}"')
+                        excerpts_str = " | ".join(quotes) if quotes else "N/A"
+
+                        flagged_regressions.append({
+                            "App Name": app,
+                            "Platform": plat,
+                            "Prior Version": prev["App Version"],
+                            "Current Version": curr["App Version"],
+                            "Prior Rating (N={})".format(prev["Sample Size (N)"]): prev["Average Rating"],
+                            "Current Rating (N={})".format(curr["Sample Size (N)"]): curr["Average Rating"],
+                            "Rating Delta": delta_r,
+                            "Prior Negative %": prev["Negative Rate %"],
+                            "Current Negative %": curr["Negative Rate %"],
+                            "Negative Rate Jump %": delta_neg,
+                            "Association Assessment": f"Potential Regression ({delta_r}★ drop; +{delta_neg}% negative rate)",
+                            "Representative Review Evidence": excerpts_str,
+                            "Analytical Warning": "Observational association only; not proof of feature-level causation.",
+                        })
+
+    reg_df = pd.DataFrame(flagged_regressions) if flagged_regressions else pd.DataFrame(columns=[
+        "App Name", "Platform", "Prior Version", "Current Version", "Rating Delta",
+        "Negative Rate Jump %", "Association Assessment", "Representative Review Evidence", "Analytical Warning"
+    ])
+
+    return v_df, reg_df
+
+
+def compute_action_priorities(
+    pareto_df: pd.DataFrame, theme_analysis_df: pd.DataFrame, total_negative_reviews: int
+) -> pd.DataFrame:
+    """
+    Construct the Action-Priority Matrix assigning P1-P3 priorities, user impact severity,
+    estimated engineering effort, recommended investigations, and measurable success metrics.
+    """
+    priority_matrix = [
+        {
+            "Theme": "Cab delays and no-shows",
+            "Priority": "P1 - Critical",
+            "Severity / Impact": "High - Direct disruption to employee office shift arrival and driver earnings.",
+            "Confidence in Evidence": "High (Statistically dominant negative theme across both platforms).",
+            "Estimated Effort": "Medium (Algorithmic dispatch tuning + driver arrival SLA enforcement).",
+            "Recommended Investigation / Fix": "Audit buffer time parameters, implement real-time driver delay alerts, and penalize repeated driver no-shows.",
+            "Suggested Success Metric": "On-Time Arrival rate >= 95%; reduction in 'delay' reviews by 30%.",
+            "Action Rationale": "Core value proposition failure; primary driver of 1-star ratings."
+        },
+        {
+            "Theme": "GPS and location tracking",
+            "Priority": "P1 - Critical",
+            "Severity / Impact": "High - Commuters cannot track vehicle; leads to panic, missed cabs, and wasted driver wait time.",
+            "Confidence in Evidence": "High (Consistent complaint across iOS and Android reviews).",
+            "Estimated Effort": "Medium (Telemetry socket optimization, background location service wake-locks).",
+            "Recommended Investigation / Fix": "Debug background GPS ping frequency on Android 13/14 battery optimization; improve map vector rendering.",
+            "Suggested Success Metric": "GPS refresh latency < 5 seconds; 40% reduction in tracking-related negative reviews.",
+            "Action Rationale": "Core operational tool; broken tracking generates immediate customer support escalations."
+        },
+        {
+            "Theme": "Booking and OTP failures",
+            "Priority": "P1 - Critical",
+            "Severity / Impact": "High - Trips cannot be initiated without OTP boarding verification.",
+            "Confidence in Evidence": "High (Frequent blocker mentioned by both employees and drivers).",
+            "Estimated Effort": "Low to Medium (SMS gateway fallback, in-app push OTP, driver-side QR boarding fallback).",
+            "Recommended Investigation / Fix": "Implement in-app dynamic boarding QR codes / Bluetooth handshake alongside SMS OTP.",
+            "Suggested Success Metric": "Boarding verification success rate >= 99.5%; boarding delay < 15 seconds.",
+            "Action Rationale": "Hard gate preventing trip start; directly stalls cab departure."
+        },
+        {
+            "Theme": "App crashes and performance",
+            "Priority": "P2 - High",
+            "Severity / Impact": "Medium to High - Prevents users from accessing the app during critical commute windows.",
+            "Confidence in Evidence": "High (Crash traces mentioned across versions).",
+            "Estimated Effort": "Medium (Crashlytics audit, memory leak profiling, ANR fixes).",
+            "Recommended Investigation / Fix": "Analyze Firebase / Crashlytics symbolicated crash logs for top fatal stack traces in current releases.",
+            "Suggested Success Metric": "Crash-Free Session rate >= 99.8%; ANR rate < 0.2%.",
+            "Action Rationale": "Technical debt directly degrading app store rating."
+        },
+        {
+            "Theme": "Driver-side experience",
+            "Priority": "P2 - High",
+            "Severity / Impact": "Medium - Frustrated drivers decline trips, reject duties, or exhibit poor commuter service.",
+            "Confidence in Evidence": "Medium (High concentration in MoveInSync Driver Partner app reviews).",
+            "Estimated Effort": "Medium (Duty acceptance workflow simplification, transparent toll reimbursement).",
+            "Recommended Investigation / Fix": "Streamline duty acceptance UX, ensure automated toll parsing, and add clear toll dispute buttons.",
+            "Suggested Success Metric": "Driver duty acceptance rate >= 90%; Driver app Play Store rating >= 4.2★.",
+            "Action Rationale": "Supply-side health is essential for reliable fleet operations."
+        },

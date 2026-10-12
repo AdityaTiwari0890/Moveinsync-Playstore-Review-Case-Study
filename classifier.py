@@ -75,3 +75,42 @@ TAXONOMY_CONFIG = [
         "patterns": [
             r"\broster\b", r"\brostering\b", r"\bschedule\b", r"\bscheduling\b",
             r"\bshift\b", r"\bshifts\b", r"\bad[- ]hoc\b", r"\bweekly roster\b",
+            r"\bmonthly roster\b", r"\bcutoff\b", r"\bcut off\b", r"\bchange shift\b",
+            r"\bweek off\b", r"\bcalendar\b", r"\bmodify trip\b",
+        ],
+    },
+    {
+        "theme": "Driver-side experience",
+        "description": "Driver partner complaints: duty allocation, passenger no-show, toll/parking, driver navigation, or app lock",
+        "patterns": [
+            r"\bdriver app\b", r"\bduty\b", r"\bduties\b", r"\btrip sheet\b",
+            r"\bpassenger\b", r"\bpassengers\b", r"\bpartner app\b", r"\bdriver partner\b",
+            r"\bdriver behavior\b", r"\brude driver\b", r"\brash driving\b", r"\bpartner\b",
+            r"\bdriver duty\b", r"\ballocation\b", r"\baccept trip\b", r"\bstart duty\b",
+        ],
+    },
+    {
+        "theme": "Billing and payment",
+        "description": "Fare calculations, deductions, trip payment, claims, toll reimbursement, or payout discrepancies",
+        "patterns": [
+            r"\bbilling\b", r"\bbill\b", r"\bpayment\b", r"\bpayments\b", r"\bmoney\b",
+            r"\bdeduction\b", r"\bdeducted\b", r"\bfare\b", r"\bpayout\b", r"\bpayouts\b",
+            r"\bcharge\b", r"\bcharged\b", r"\bcharges\b", r"\breimbursement\b", r"\btoll\b",
+        ],
+    },
+    {
+        "theme": "Customer support",
+        "description": "Helpdesk responsiveness, unresolved tickets, helpline numbers, or escalation grievances",
+        "patterns": [
+            r"\bsupport\b", r"\bcustomer care\b", r"\bhelpdesk\b", r"\bhelpline\b",
+            r"\bticket\b", r"\bno response\b", r"\bunresolved\b", r"\bescalation\b",
+            r"\bexecutive\b", r"\bcall center\b", r"\bcomplaint\b", r"\bcare team\b",
+        ],
+    },
+    {
+        "theme": "Other or unclear",
+        "description": "Vague commentary, non-specific low ratings, or feedback not mapping to specific functional areas",
+        "patterns": [
+            r"\bbad\b", r"\bworst\b", r"\bterrible\b", r"\bhorrible\b", r"\buseless\b",
+            r"\bwaste\b", r"\bpathetic\b", r"\bbakwas\b", r"\bghatiya\b", r"\bpoor\b",
+        ],
