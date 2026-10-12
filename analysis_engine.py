@@ -111,3 +111,117 @@ def load_and_normalize_workbook(filepath: str) -> Tuple[pd.DataFrame, Dict[str, 
             col_mapping[c] = "reviewer_name"
         elif norm in ("rating", "score"):
             col_mapping[c] = "rating"
+        elif norm in ("review title", "title"):
+            col_mapping[c] = "review_title"
+        elif norm in ("review text", "content", "text"):
+            col_mapping[c] = "review_text"
+        elif norm in ("review date", "date", "at"):
+            col_mapping[c] = "review_date"
+        elif norm in ("app version", "version"):
+            col_mapping[c] = "app_version"
+        elif norm in ("developer reply", "developer response"):
+            col_mapping[c] = "developer_reply"
+        elif norm in ("helpful votes", "thumbs up count", "votes"):
+            col_mapping[c] = "helpful_votes"
+        elif norm in ("source url", "url"):
+            col_mapping[c] = "source_url"
+
+    df = df_raw.rename(columns=col_mapping).copy()
+
+    # Ensure critical columns exist with defaults
+    if "app_name" not in df.columns:
+        df["app_name"] = "MoveInSync"
+    if "platform" not in df.columns:
+        df["platform"] = "Unknown"
+    if "app_role" not in df.columns:
+        df["app_role"] = "employee"
+    if "review_text" not in df.columns:
+        df["review_text"] = ""
+    if "review_title" not in df.columns:
+        df["review_title"] = ""
+    if "app_version" not in df.columns:
+        df["app_version"] = "Unknown"
+
+    initial_count = len(df)
+
+    # Coerce ratings safely
+    df["rating"] = pd.to_numeric(df["rating"], errors="coerce")
+    invalid_ratings = df["rating"].isnull().sum()
+    # Filter valid ratings 1..5
+    df = df[df["rating"].between(1, 5)].copy()
+    df["rating"] = df["rating"].astype(int)
+
+    # Deduplicate reviews
+    if "review_id" in df.columns:
+        df["review_id"] = df["review_id"].astype(str)
+        duplicates_count = df.duplicated(subset=["review_id"]).sum()
+        df = df.drop_duplicates(subset=["review_id"]).copy()
+    else:
+        duplicates_count = df.duplicated(subset=["reviewer_name", "review_date", "review_text"]).sum()
+        df = df.drop_duplicates(subset=["reviewer_name", "review_date", "review_text"]).copy()
+
+    # Normalize Dates
+    df["review_date_parsed"] = pd.to_datetime(df["review_date"], errors="coerce")
+    df["year_month"] = df["review_date_parsed"].dt.strftime("%Y-%m")
+
+    # Normalize Versions
+    df["app_version_clean"] = df["app_version"].fillna("Unknown / Not Specified").astype(str).str.strip()
+    df.loc[df["app_version_clean"].isin(["", "nan", "None", "null"]), "app_version_clean"] = "Unknown / Not Specified"
+
+    audit_meta = {
+        "input_filepath": filepath,
+        "initial_rows": initial_count,
+        "valid_rows": len(df),
+        "invalid_ratings_dropped": int(invalid_ratings),
+        "duplicates_dropped": int(duplicates_count),
+        "apps_found": df["app_name"].value_counts().to_dict(),
+        "platforms_found": df["platform"].value_counts().to_dict(),
+        "roles_found": df["app_role"].value_counts().to_dict(),
+    }
+
+    return df, audit_meta
+
+
+def compute_rating_analysis(df: pd.DataFrame, min_sample: int = 15) -> Dict[str, Any]:
+    """
+    Calculate rating distributions, negative rates with Wilson confidence intervals,
+    and monthly trends with sample size safeguards.
+    """
+    def _calc_stats(sub_df: pd.DataFrame, segment_name: str, sub_segment: str) -> Dict[str, Any]:
+        n = len(sub_df)
+        if n == 0:
+            return {
+                "Segment": segment_name, "Sub-Segment": sub_segment, "Sample Size (N)": 0,
+                "Sample Size Flag": "No Data", "Sample Avg Rating": None,
+                "1★ Count": 0, "1★ %": 0.0, "2★ Count": 0, "2★ %": 0.0,
+                "3★ Count": 0, "3★ %": 0.0, "4★ Count": 0, "4★ %": 0.0,
+                "5★ Count": 0, "5★ %": 0.0,
+                "Negative Count (1★+2★)": 0, "Negative Rate %": 0.0,
+                "Wilson 95% CI Lower": 0.0, "Wilson 95% CI Upper": 0.0,
+                "Positive Rate % (4★+5★)": 0.0,
+            }
+
+        ratings = sub_df["rating"]
+        avg_r = round(ratings.mean(), 2)
+        star_counts = ratings.value_counts().to_dict()
+
+        c1 = star_counts.get(1, 0)
+        c2 = star_counts.get(2, 0)
+        c3 = star_counts.get(3, 0)
+        c4 = star_counts.get(4, 0)
+        c5 = star_counts.get(5, 0)
+
+        neg_count = c1 + c2
+        neg_rate = round(neg_count / n * 100, 1)
+        ci_low, ci_high = wilson_confidence_interval(neg_count, n)
+        pos_rate = round((c4 + c5) / n * 100, 1)
+
+        flag = "Sufficient Sample" if n >= min_sample else f"Low Sample (N < {min_sample})"
+
+        return {
+            "Segment": segment_name,
+            "Sub-Segment": sub_segment,
+            "Sample Size (N)": n,
+            "Sample Size Flag": flag,
+            "Sample Avg Rating": avg_r,
+            "1★ Count": c1, "1★ %": round(c1 / n * 100, 1),

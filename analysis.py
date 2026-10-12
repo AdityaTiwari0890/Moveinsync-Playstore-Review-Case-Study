@@ -149,3 +149,41 @@ def calculate_sample_summary(reviews: List[Dict[str, Any]], requested_count: int
         "star_3_count": counts[3],
         "star_3_pct": round(counts[3] / total * 100, 1),
         "star_4_count": counts[4],
+        "star_4_pct": round(counts[4] / total * 100, 1),
+        "star_5_count": counts[5],
+        "star_5_pct": round(counts[5] / total * 100, 1),
+        "negative_count": negative_count,
+        "negative_pct": round(negative_count / total * 100, 1),
+        "positive_count": positive_count,
+        "positive_pct": round(positive_count / total * 100, 1),
+        "earliest_date": earliest_date,
+        "most_recent_date": most_recent_date,
+        "collection_date": datetime.datetime.now().strftime("%Y-%m-%d"),
+    }
+
+
+def calculate_monthly_trends(reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Calculate monthly review volume, average rating, and negative review percentage.
+    """
+    groups: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+
+    for r in reviews:
+        r_date = r.get("review_date")
+        if not r_date or len(r_date) < 7:
+            continue
+        ym = r_date[:7]  # 'YYYY-MM'
+        app_name = r.get("app_name", "Unknown")
+        platform = r.get("platform", "Unknown")
+        groups[(ym, app_name, platform)].append(r)
+
+    results = []
+    for (ym, app_name, platform), revs in sorted(groups.items(), key=lambda x: x[0][0], reverse=True):
+        ratings = [r.get("rating", 0) for r in revs if r.get("rating")]
+        avg_r = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+        neg = sum(1 for r in ratings if r in (1, 2))
+        results.append({
+            "year_month": ym,
+            "app_name": app_name,
+            "platform": platform,
+            "review_count": len(revs),
