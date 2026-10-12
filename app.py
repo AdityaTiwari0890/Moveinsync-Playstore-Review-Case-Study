@@ -194,3 +194,69 @@ def _render_chat(db_path: str, vector_path: str, key_suffix: str, filters: Optio
                     with st.expander(f"Evidence ({len(result['evidence'])} sources)"):
                         for evidence in result["evidence"]:
                             metadata = evidence["metadata"]
+                            identifier = metadata.get("review_id") or metadata.get("source_name")
+                            st.markdown(
+                                f"**[{evidence['citation']}] {identifier}** · "
+                                f"{metadata.get('platform') or metadata.get('sheet') or metadata.get('section') or metadata.get('source_type')}"
+                            )
+                            st.caption(evidence["content"][:1200])
+                with st.expander("Verified structured metrics and filters"):
+                    st.json({"filters": result.get("filters"), "metrics": result.get("metrics")})
+                st.session_state[chat_key].append(
+                    {
+                        "role": "assistant",
+                        "content": result["answer"],
+                        "evidence": result.get("evidence", []),
+                        "metrics": result.get("metrics"),
+                        "filters": result.get("filters"),
+                    }
+                )
+            else:
+                st.error(result.get("error", "The assistant could not answer this question."))
+
+
+def _overview(db_path: str, vector_path: str, filters: Dict[str, Any]) -> None:
+    st.title("MOVEINSYNC Ratings Watch")
+    st.caption("Evidence-led review analytics. Collected review averages and published store ratings are reported separately.")
+    data = _filtered_review_data(db_path, filters)
+    total = len(data)
+    average = float(data["rating"].mean()) if total and "rating" in data else None
+    negative_count = int((data["rating"] <= 2).sum()) if total else 0
+    negative_share = negative_count * 100.0 / total if total else None
+    alerts = _rows(db_path, "SELECT COUNT(*) AS count FROM alerts WHERE resolved=0")
+    latest_run = _rows(db_path, "SELECT platform, completed_at, status FROM collection_runs WHERE status IN ('success','partial') ORDER BY completed_at DESC LIMIT 1")
+    snapshots = _rows(
+        db_path,
+        """SELECT s.platform, s.official_rating, s.total_ratings_count, s.rating_source, s.snapshot_at
+           FROM rating_snapshots s JOIN (
+             SELECT platform, MAX(snapshot_at) AS latest FROM rating_snapshots
+             WHERE official_rating IS NOT NULL GROUP BY platform
+           ) latest ON s.platform=latest.platform AND s.snapshot_at=latest.latest ORDER BY s.platform""",
+    )
+    cols = st.columns(5)
+    cols[0].metric("Collected reviews", f"{total:,}", help="Review records in SQLite after the current filters.")
+    cols[1].metric("Sample average", f"{average:.2f} / 5" if average is not None else "N/A", help="Arithmetic mean of collected review ratings, not a store listing rating.")
+    cols[2].metric("Negative sample share", f"{negative_share:.1f}%" if negative_share is not None else "N/A", help="Percent of selected collected review records rated 1–2 stars.")
+    cols[3].metric("Active alerts", int(alerts[0]["count"]))
+    cols[4].metric("Latest collection", latest_run[0]["completed_at"] if latest_run else "N/A")
+    if snapshots:
+        st.subheader("Latest recorded store-rating snapshots")
+        snapshot_cols = st.columns(min(4, len(snapshots)))
+        for index, snapshot in enumerate(snapshots):
+            snapshot_cols[index % len(snapshot_cols)].metric(
+                f"{snapshot['platform']} snapshot",
+                f"{snapshot['official_rating']:.2f}",
+                help=f"Recorded source: {snapshot['rating_source']}; timestamp: {snapshot['snapshot_at']}",
+            )
+    else:
+        st.info("No verified published store-rating snapshots are available. The collected-review average above is not a substitute.")
+    if data.empty:
+        st.warning("No review records match the current filters. Import the analyzed workbook or collect supported platform data.")
+    else:
+        left, right = st.columns(2)
+        with left:
+            st.subheader("Review volume by publication month")
+            monthly = data.copy()
+            monthly["month"] = pd.to_datetime(monthly["review_date"], errors="coerce").dt.to_period("M").astype(str)
+            volume = monthly.dropna(subset=["month"]).groupby("month").size().rename("reviews").reset_index()
+            if not volume.empty:
