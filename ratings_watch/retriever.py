@@ -26,3 +26,32 @@ def _question_filters(question: str) -> Dict[str, Any]:
     if len(iso_dates) == 1:
         filters["date_after"] = iso_dates[0]
     elif len(iso_dates) >= 2:
+        filters["date_after"], filters["date_before"] = sorted(iso_dates[:2])
+    elif "last 30 days" in lowered or "past 30 days" in lowered:
+        filters["date_after"] = (date.today() - timedelta(days=30)).isoformat()
+    return filters
+
+
+def _structured_evidence(db_path: str, filters: Dict[str, Any]) -> Dict[str, Any]:
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        def build_where(include_platform: bool) -> tuple[str, List[Any]]:
+            clauses: List[str] = []
+            parameters: List[Any] = []
+            if include_platform and filters.get("platform"):
+                clauses.append("platform = ?")
+                parameters.append(filters["platform"])
+            if filters.get("app_role"):
+                clauses.append("app_role = ?")
+                parameters.append(filters["app_role"])
+            if filters.get("app_name"):
+                clauses.append("app_name = ?")
+                parameters.append(filters["app_name"])
+            if filters.get("store_id"):
+                clauses.append("store_id = ?")
+                parameters.append(filters["store_id"])
+            if filters.get("date_after"):
+                clauses.append("review_date >= ?")
+                parameters.append(filters["date_after"])
+            if filters.get("date_before"):
