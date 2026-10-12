@@ -598,3 +598,154 @@ def build_priority_matrix(
         elif theme == "Roster and scheduling":
             success_metric = "Roster complaint share < 5% of negative reviews (baseline: current share %)"
         elif theme == "Billing and payment":
+            success_metric = "Billing dispute resolution < 48 h; dispute complaint share < 3% of negatives (baseline: TBC)"
+        elif theme == "UI and usability":
+            success_metric = "Booking task completion time reduced ≥ 25% (baseline: usability study required)"
+        else:
+            success_metric = "To be confirmed after manual triage of 'Other / unclear' sample."
+
+        rows.append({
+            "Priority": priority,
+            "Priority Score": total_score,
+            "Theme": theme,
+            "Category": meta["category"],
+            "Negative Reviews Count": neg_count,
+            "Share of Negative Reviews %": round(share_pct, 1),
+            "Wilson 95% CI": f"[{ci_low}%, {ci_high}%]" if ci_low != "N/A" else "N/A",
+            "Pareto Status": pareto_class,
+            "Severity / User Impact": ["Low", "Low-Medium", "Medium-High", "High"][SEVERITY.get(theme, 1)],
+            "Effort Estimate": meta["effort_estimate"],
+            "Owner Team": meta["owner_team"],
+            "Provisional Status": "Provisional — validate with product, engineering, and operations teams before committing",
+            "Suggested Success Metric": success_metric,
+            "Sample Evidence": evidence_str,
+            "Action Status": "Open",
+        })
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows).sort_values(["Priority Score"], ascending=False).reset_index(drop=True)
+    return df
+
+
+# ===========================================================================
+# IMPACT vs EFFORT MATRIX
+# ===========================================================================
+
+def build_impact_effort_matrix(priority_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Map each theme into a 4-quadrant Impact × Effort matrix.
+    Impact = measured negative-review share (from workbook).
+    Effort = qualitative estimate (from THEME_META).
+    """
+    rows = []
+    for _, r in priority_df.iterrows():
+        theme = r["Theme"]
+        quadrant = IMPACT_EFFORT_QUADRANT.get(theme, "Fill-In")
+        quadrant_desc = QUADRANT_DESCRIPTION.get(quadrant, "")
+        impact_evidence = (
+            f"Measured: {r['Negative Reviews Count']:,} negative reviews, "
+            f"{r['Share of Negative Reviews %']}% share (Wilson CI: {r['Wilson 95% CI']})"
+        )
+        rows.append({
+            "Quadrant": quadrant,
+            "Theme": theme,
+            "Category": r["Category"],
+            "Measured Impact Evidence": impact_evidence,
+            "Effort Estimate (Qualitative)": r["Effort Estimate"],
+            "Owner Team": r["Owner Team"],
+            "Recommended Immediate Action": (
+                "Prioritize in next sprint" if quadrant == "Quick Win"
+                else "Plan dedicated project" if quadrant == "Major Project"
+                else "Schedule opportunistically" if quadrant == "Fill-In"
+                else "Monitor; do not invest heavily"
+            ),
+            "Quadrant Description": quadrant_desc,
+        })
+
+    order = {"Quick Win": 0, "Major Project": 1, "Fill-In": 2, "Deprioritize": 3}
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df["_order"] = df["Quadrant"].map(order)
+        df = df.sort_values("_order").drop(columns=["_order"]).reset_index(drop=True)
+    return df
+
+
+# ===========================================================================
+# RATING IMPROVEMENT STRATEGY
+# ===========================================================================
+
+def build_rating_strategy() -> pd.DataFrame:
+    """
+    Define the compliant rating improvement initiatives.
+    Explicitly labels initiative type, compliance note, owner, and metric.
+    All recommendations are policy-compliant; no gating or incentivization.
+    """
+    rows = [
+        {
+            "Initiative": "Fix validated high-impact problems first",
+            "Type": "Product / Engineering",
+            "Description": (
+                "Address P1 technical defects (crashes, GPS, OTP, login) and P1 operational "
+                "failures (delays) before investing in review acquisition. Rating improvement "
+                "driven by fixing real problems is more durable and defensible."
+            ),
+            "Owner": "Product + Engineering + Operations",
+            "Estimated Timeline": "0–3 months (P1 items); 3–6 months (P2 items)",
+            "Compliance Note": "No store-policy concerns. Standard product improvement.",
+            "Success Metric": "Sample negative review rate falls below 35% within 6 months of P1 fixes (baseline: current measured rate — see Rating_Trends sheet)",
+            "Status": "Open",
+        },
+        {
+            "Initiative": "Compliant in-app review prompt (post-successful trip)",
+            "Type": "Growth / Product",
+            "Description": (
+                "After a trip completes successfully and the employee or driver marks the journey "
+                "as satisfactory, prompt once per rolling 90 days: 'Enjoying the app? Rate us on "
+                "the Play Store / App Store.' No pre-screening; no conditional routing based on "
+                "expected rating. Both positive and dissatisfied users reach the store directly."
+            ),
+            "Owner": "Mobile Engineering + Product",
+            "Estimated Timeline": "1–2 sprints (4–8 weeks)",
+            "Compliance Note": (
+                "Compliant with Google Play Developer Policy and Apple App Store Review Guidelines. "
+                "Does NOT gate, filter, or intercept reviews by anticipated star rating. "
+                "DOES NOT offer incentives (credits, discounts) in exchange for reviews."
+            ),
+            "Success Metric": "Review volume increases ≥ 20% within 60 days of prompt launch (baseline: monthly review count — see Rating_Trends sheet)",
+            "Status": "Open",
+        },
+        {
+            "Initiative": "Separate in-app support pathway (does not suppress public feedback)",
+            "Type": "Customer Experience",
+            "Description": (
+                "Add a clearly visible 'Report a problem' button in the app that routes users to "
+                "an in-app support ticket, not to the store review page. This gives frustrated "
+                "users a private resolution channel alongside the public review option — both "
+                "must remain equally visible and accessible."
+            ),
+            "Owner": "Customer Experience + Mobile Engineering",
+            "Estimated Timeline": "4–6 weeks",
+            "Compliance Note": (
+                "Both the support pathway AND the store review link must be equally accessible. "
+                "Must not replace or obscure the store review option for negative users. "
+                "Compliant with Google Play and Apple policies on review interception."
+            ),
+            "Success Metric": "In-app ticket resolution rate ≥ 85% within 48 h; no increase in store review suppression complaints (baseline: TBC from CX system)",
+            "Status": "Open",
+        },
+        {
+            "Initiative": "Developer review-response workflow",
+            "Type": "Community / Reputation",
+            "Description": (
+                "Implement a structured weekly process: (1) triage new 1-star and 2-star reviews "
+                "within 48 h; (2) respond to all 1-star reviews within 5 business days with a "
+                "specific, non-generic acknowledgement; (3) escalate recurring themes (>5 mentions/week) "
+                "to the relevant engineering or ops team lead; (4) track resolution status in the "
+                "Action Plan workbook; (5) update response when issue is resolved."
+            ),
+            "Owner": "Product Manager + Customer Experience",
+            "Estimated Timeline": "Process setup: 2 weeks; ongoing weekly cadence",
+            "Compliance Note": "Allowed by both store platforms. Do not request rating changes in responses.",
+            "Success Metric": "100% of 1★ reviews receive a response within 5 business days; escalation-to-resolution loop tracked in Action Plan workbook (baseline: 0 structured responses currently)",
