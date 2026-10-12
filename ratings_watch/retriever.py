@@ -112,3 +112,31 @@ def _structured_evidence(db_path: str, filters: Dict[str, Any]) -> Dict[str, Any
         result["platform_comparison"] = [
             {
                 "platform": item["platform"],
+                "review_count": int(item["total"]),
+                "sample_average_rating": round(float(item["avg_rating"]), 2) if item["avg_rating"] is not None else None,
+                "negative_review_share_percent": round(100 * int(item["negative"] or 0) / item["total"], 2) if item["total"] else None,
+            }
+            for item in platform_rows
+        ]
+        snapshots = conn.execute(
+            """
+            SELECT platform, official_rating, total_ratings_count, rating_source, snapshot_at
+            FROM rating_snapshots WHERE official_rating IS NOT NULL
+            ORDER BY snapshot_at DESC LIMIT 12
+            """
+        ).fetchall()
+        result["rating_snapshots"] = [dict(item) for item in snapshots]
+        result["limitations"] = [
+            "Collected-review averages describe the collected sample and are not official store ratings.",
+            "Platform sample comparisons are descriptive and do not establish causation.",
+        ]
+        return result
+    finally:
+        conn.close()
+
+
+def ask_analyst(
+    question: str,
+    db_path: str = DB_PATH,
+    vector_path: str = VECTOR_STORE_PATH,
+    assistant: Optional[LLMAssistant] = None,

@@ -88,3 +88,26 @@ class LLMAssistant:
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
+        messages.append({"role": "user", "content": prompt})
+        payload: Dict[str, Any] = {"model": self.model, "messages": messages, "stream": False}
+        if tools:
+            payload["tools"] = tools
+        try:
+            response = requests.post(
+                f"{self.base_url}/chat",
+                headers=self._headers(),
+                json=payload,
+                timeout=timeout,
+            )
+            if response.status_code != 200:
+                return {"ok": False, "error": self._response_error(response, "chat")}
+            payload = response.json()
+            if not isinstance(payload, dict):
+                return {"ok": False, "error": "Ollama chat returned an invalid response object."}
+            message = payload.get("message")
+            content = message.get("content") if isinstance(message, dict) else None
+            if not isinstance(content, str):
+                return {"ok": False, "error": "Ollama chat returned an invalid response: message.content is missing."}
+            return {"ok": True, "answer": content.strip()}
+        except requests.Timeout:
+            return {"ok": False, "error": "Ollama chat request timed out. Check connectivity or try again."}
