@@ -100,3 +100,18 @@ def normalize_review(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     return {
         "review_id": review_id,
+        "platform": platform,
+        "store_id": _clean_str(_get("store_id", "Store ID", "package_id")),
+        "app_name": _clean_str(_get("app_name", "App Name")),
+        "app_role": _clean_str(_get("app_role", "App Role")),
+        "reviewer_name": _clean_str(_get("reviewer_name", "Reviewer Name")),
+        "rating": rating,
+        "review_title": _clean_str(_get("review_title", "Review Title")),
+        "review_text": _clean_str(_get("review_text", "Review Text", "content")) or "",
+        "review_date": _parse_date(_get("review_date", "Review Date", "at", "updated")),
+        "app_version": _clean_str(_get("app_version", "App Version")),
+        "developer_reply": _clean_str(_get("developer_reply", "Developer Reply")),
+        "developer_reply_date": _parse_date(_get("developer_reply_date", "Developer Reply Date")),
+        "helpful_votes": _safe_int(_get("helpful_votes", "Helpful Votes")),
+        "assigned_themes": themes,
+        "classification_method": _clean_str(_get("classification_method")),
