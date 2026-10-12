@@ -448,3 +448,153 @@ def _sample_review_excerpts(
     if df.empty:
         return []
 
+    # Filter by theme if assigned_themes available
+    if "assigned_themes" in df.columns:
+        theme_mask = df["assigned_themes"].astype(str).str.contains(theme_name, case=False, na=False)
+        themed_df = df[theme_mask]
+        if themed_df.empty:
+            themed_df = df  # fall back to general negative reviews
+    else:
+        themed_df = df
+
+    excerpts = []
+    for _, row in themed_df.head(n).iterrows():
+        rid = str(row.get("review_id", "")).strip()[:8] or "?"
+        text = str(row.get("review_text", "")).replace("\n", " ").strip()
+        if len(text) > 110:
+            text = text[:107] + "..."
+        if text:
+            excerpts.append(f'[{rid}]: "{text}"')
+
+    return excerpts
+
+
+# ===========================================================================
+# PRIORITY MATRIX
+# ===========================================================================
+
+def build_priority_matrix(
+    pareto_df: pd.DataFrame,
+    metrics: Dict[str, Any],
+    raw_df: Optional[pd.DataFrame],
+) -> pd.DataFrame:
+    """
+    Construct a multi-factor P1/P2/P3 priority matrix.
+    Scoring factors (each 0–3):
+      F1 — Frequency: share of negative reviews
+      F2 — Platform breadth: both platforms affected
+      F3 — User impact severity (predefined per theme)
+      F4 — Classification confidence
+      F5 — Inverse effort (lower effort = higher score)
+    Total 0–15 → P1 ≥ 11, P2 7–10, P3 ≤ 6
+    """
+    SEVERITY: Dict[str, int] = {
+        "App crashes and performance": 3,
+        "Login and account access": 3,
+        "Booking and OTP failures": 3,
+        "GPS and location tracking": 3,
+        "Cab delays and no-shows": 3,
+        "Driver-side experience": 2,
+        "Customer support": 2,
+        "Roster and scheduling": 2,
+        "Billing and payment": 2,
+        "UI and usability": 1,
+        "Other or unclear": 1,
+    }
+    # Effort score: 0 = high effort, 3 = very low effort
+    EFFORT_SCORE: Dict[str, int] = {
+        "App crashes and performance": 1,
+        "Login and account access": 2,
+        "Booking and OTP failures": 2,
+        "GPS and location tracking": 1,
+        "Cab delays and no-shows": 1,
+        "Driver-side experience": 1,
+        "Customer support": 2,
+        "Roster and scheduling": 2,
+        "Billing and payment": 2,
+        "UI and usability": 1,
+        "Other or unclear": 0,
+    }
+
+    total_neg = metrics.get("total_reviews", 1)
+    neg_count_total = int(total_neg * metrics.get("neg_rate", 0) / 100) or 1
+
+    rows = []
+    for _, pr in pareto_df.iterrows():
+        theme = str(pr.get("Theme", "")).strip()
+        if not theme:
+            continue
+
+        neg_count = int(pr.get("Negative Reviews Count", 0) or 0)
+        share_pct = float(pr.get("Share of Negative Reviews %", 0) or 0)
+        ci_low = pr.get("Wilson CI Lower", "N/A")
+        ci_high = pr.get("Wilson CI Upper", "N/A")
+        pareto_class = str(pr.get("Pareto Classification", "")).strip()
+
+        # --- Scoring ---
+        # F1: frequency
+        if share_pct >= 15:
+            f1 = 3
+        elif share_pct >= 8:
+            f1 = 2
+        elif share_pct >= 4:
+            f1 = 1
+        else:
+            f1 = 0
+
+        # F2: platform breadth (assume both affected unless theme is driver-only)
+        f2 = 2 if theme != "Driver-side experience" else 1
+
+        # F3: severity
+        f3 = SEVERITY.get(theme, 1)
+
+        # F4: confidence from pareto classification
+        if "vital few" in pareto_class.lower():
+            f4 = 2
+        else:
+            f4 = 1
+
+        # F5: inverse effort
+        f5 = EFFORT_SCORE.get(theme, 1)
+
+        total_score = f1 + f2 + f3 + f4 + f5
+
+        if total_score >= 11:
+            priority = "P1 — Critical"
+            priority_rationale = "High frequency + high user impact + sufficient evidence"
+        elif total_score >= 7:
+            priority = "P2 — High"
+            priority_rationale = "Moderate-high frequency or impact; warrants planned sprint"
+        else:
+            priority = "P3 — Medium"
+            priority_rationale = "Lower frequency or impact; address after P1/P2"
+
+        meta = THEME_META.get(theme, {
+            "category": "Unclear — Requires Investigation",
+            "owner_team": "Product / QA",
+            "effort_estimate": "Estimate: Unknown",
+            "compliance_flag": "Triage required",
+        })
+
+        # Sample evidence excerpts
+        excerpts = _sample_review_excerpts(raw_df, theme, n=2)
+        evidence_str = " | ".join(excerpts) if excerpts else "See Pareto_Analysis sheet for classified review IDs."
+
+        # Success metric baseline
+        if theme == "App crashes and performance":
+            success_metric = "Crash-free session rate ≥ 99.8%; ANR rate < 0.2% (baseline: requires Firebase/Crashlytics data)"
+        elif theme == "Login and account access":
+            success_metric = "First-attempt login success rate ≥ 98% (baseline: TBC from auth service logs)"
+        elif theme == "GPS and location tracking":
+            success_metric = "Location refresh latency < 5 s; 40% reduction in tracking-related negative reviews (baseline: current share %)"
+        elif theme == "Booking and OTP failures":
+            success_metric = "Boarding verification success rate ≥ 99.5%; verification time < 15 s (baseline: TBC from trip service logs)"
+        elif theme == "Cab delays and no-shows":
+            success_metric = "On-time pickup rate ≥ 95%; 30% reduction in delay-related negative reviews (baseline: TBC from dispatch logs)"
+        elif theme == "Driver-side experience":
+            success_metric = "Driver duty acceptance rate ≥ 90%; Driver app rating ≥ 4.2★ (baseline: current sample avg)"
+        elif theme == "Customer support":
+            success_metric = "First response time < 2 min for active-trip emergencies (baseline: TBC from CX ticketing system)"
+        elif theme == "Roster and scheduling":
+            success_metric = "Roster complaint share < 5% of negative reviews (baseline: current share %)"
+        elif theme == "Billing and payment":
