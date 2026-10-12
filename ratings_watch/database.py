@@ -159,3 +159,56 @@ DDL_STATEMENTS = [
 def get_connection(db_path: str = DB_PATH) -> sqlite3.Connection:
     """Return a thread-local SQLite connection (creates if needed)."""
     db_path = str(resolve_project_path(db_path))
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    if not hasattr(_local, "connections"):
+        _local.connections = {}
+    if db_path not in _local.connections:
+        conn = sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA foreign_keys=ON")
+        _local.connections[db_path] = conn
+    return _local.connections[db_path]
+
+
+def close_connection(db_path: str = DB_PATH) -> None:
+    if hasattr(_local, "connections") and db_path in _local.connections:
+        _local.connections[db_path].close()
+        del _local.connections[db_path]
+
+
+def close_all_connections() -> None:
+    if hasattr(_local, "connections"):
+        for db_path in list(_local.connections.keys()):
+            try:
+                _local.connections[db_path].close()
+            except Exception:
+                pass
+        _local.connections.clear()
+
+
+@contextmanager
+def transaction(db_path: str = DB_PATH) -> Generator[sqlite3.Connection, None, None]:
+    """Context manager that commits on success, rolls back on exception."""
+    conn = get_connection(db_path)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+
+
+def init_db(db_path: str = DB_PATH) -> None:
+    """Create all tables and indexes if they don't already exist. Safe to re-run."""
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    conn = get_connection(db_path)
+    for stmt in DDL_STATEMENTS:
+        conn.execute(stmt)
+    review_columns = {row["name"] for row in conn.execute("PRAGMA table_info(reviews)")}
+    if "source_collection_timestamp" not in review_columns:
+        conn.execute("ALTER TABLE reviews ADD COLUMN source_collection_timestamp TEXT")
+    if "is_unclassified" not in review_columns:
+        conn.execute("ALTER TABLE reviews ADD COLUMN is_unclassified INTEGER NOT NULL DEFAULT 0")
+    conn.execute(
+        "INSERT INTO schema_metadata(key, value) VALUES('schema_version', '3') "

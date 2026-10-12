@@ -55,3 +55,31 @@ def evaluate_rating_drop(
                 WHERE platform=? AND official_rating IS NOT NULL
                 ORDER BY snapshot_at DESC, id DESC LIMIT 2
                 """,
+                (platform,),
+            ).fetchall()
+            if len(snapshots) < 2:
+                continue
+            current, previous = snapshots[0], snapshots[1]
+            delta = float(previous[1]) - float(current[1])
+            if delta > threshold:
+                alerts.append(
+                    {
+                        "alert_type": "rating_drop",
+                        "platform": platform,
+                        "baseline_value": float(previous[1]),
+                        "current_value": float(current[1]),
+                        "threshold": threshold,
+                        "severity": "high" if delta > threshold * 1.5 else "medium",
+                        "supporting_ids": [f"snapshot:{previous[0]}", f"snapshot:{current[0]}"],
+                        "suggested_action": "Verify the rating change against the original store listings, then inspect recent reviews and release or operations evidence.",
+                        "alert_key": f"rating_drop:{platform}",
+                        "cooldown_until": _cooldown_until(),
+                    }
+                )
+        return alerts
+    finally:
+        conn.close()
+
+
+def evaluate_negative_share_spike(
+    db_path: str,

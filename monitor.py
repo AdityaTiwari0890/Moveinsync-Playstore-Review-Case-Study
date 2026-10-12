@@ -84,3 +84,31 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     import_parser = subparsers.add_parser("import-existing", help="Import Step 1/2 workbook into SQLite")
+    import_parser.add_argument("--input", default=EXISTING_WORKBOOK)
+    import_parser.add_argument("--db", default=settings.db_path)
+    import_parser.add_argument("--dry-run", action="store_true")
+
+    collect_parser = subparsers.add_parser("collect", help="Collect ratings from a configured source")
+    collect_parser.add_argument("--platform", choices=["android", "ios"], default="android")
+    collect_parser.add_argument("--app-id", default=None)
+    collect_parser.add_argument("--app-name", default=None)
+    collect_parser.add_argument("--app-role", choices=["employee", "driver", "competitor"], default="employee")
+    collect_parser.add_argument("--count", type=int, default=200)
+    collect_parser.add_argument("--db", default=settings.db_path)
+
+    snapshot_parser = subparsers.add_parser("snapshot", help="Save a rating snapshot")
+    snapshot_parser.add_argument("--platform", default="android")
+    snapshot_parser.add_argument("--app-id", default=settings.default_android_package)
+    snapshot_parser.add_argument("--app-name", default=settings.current_app_name)
+    snapshot_parser.add_argument("--rating", type=float, default=None)
+    snapshot_parser.add_argument("--db", default=settings.db_path)
+
+    alert_parser = subparsers.add_parser("check-alerts", help="Evaluate and store alerts")
+    alert_parser.add_argument("--db", default=settings.db_path)
+
+    index_parser = subparsers.add_parser("index-knowledge-base", help="Incrementally index analysis, reviews and actions")
+    index_parser.add_argument("--db", default=settings.db_path)
+    index_parser.add_argument("--vector-store", default=VECTOR_STORE_PATH)
+    index_parser.add_argument("--rebuild", action="store_true")
+
+    subparsers.add_parser("ai-check", help="Test hosted/local chat inference and embeddings independently")
