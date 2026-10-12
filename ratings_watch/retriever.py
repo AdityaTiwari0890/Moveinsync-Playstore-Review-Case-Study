@@ -83,3 +83,32 @@ def _structured_evidence(db_path: str, filters: Dict[str, Any]) -> Dict[str, Any
                 "one_star_count": int(row["one_star"] or 0),
             },
             "filters": filters or {"platform": "all", "app_role": "all"},
+        }
+        theme_rows = conn.execute(f"SELECT assigned_themes FROM reviews{where}", parameters).fetchall()
+        theme_counts: Dict[str, int] = {}
+        for theme_row in theme_rows:
+            try:
+                themes = json.loads(theme_row["assigned_themes"] or "[]")
+            except (TypeError, ValueError):
+                themes = []
+            if isinstance(themes, list):
+                for theme in themes:
+                    if theme:
+                        theme_counts[str(theme)] = theme_counts.get(str(theme), 0) + 1
+        result["themes_by_review_count"] = [
+            {"theme": key, "review_count": value}
+            for key, value in sorted(theme_counts.items(), key=lambda item: (-item[1], item[0]))[:10]
+        ]
+        comparison_where, comparison_parameters = build_where(include_platform=False)
+        platform_rows = conn.execute(
+            f"""
+            SELECT platform, COUNT(*) AS total, AVG(rating) AS avg_rating,
+                   SUM(CASE WHEN rating <= 2 THEN 1 ELSE 0 END) AS negative
+            FROM reviews{comparison_where}
+            GROUP BY platform ORDER BY platform
+            """,
+            comparison_parameters,
+        ).fetchall()
+        result["platform_comparison"] = [
+            {
+                "platform": item["platform"],
