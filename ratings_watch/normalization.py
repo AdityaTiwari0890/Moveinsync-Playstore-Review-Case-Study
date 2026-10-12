@@ -115,3 +115,18 @@ def normalize_review(raw: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         "helpful_votes": _safe_int(_get("helpful_votes", "Helpful Votes")),
         "assigned_themes": themes,
         "classification_method": _clean_str(_get("classification_method")),
+        "heuristic_confidence": _clean_str(_get("heuristic_confidence")),
+        "is_unclassified": is_unclassified,
+        "source_url": _clean_str(_get("source_url", "Source URL")),
+        "source_collection_timestamp": _parse_date(_get("source_collection_timestamp", "Collection Timestamp", "collection_timestamp")),
+    }
+
+
+def normalize_reviews(raws: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Normalize a batch, dropping records without valid source identifiers and ratings."""
+    results = []
+    for r in raws:
+        normalized = normalize_review(r)
+        if normalized:
+            results.append(normalized)
+    return results

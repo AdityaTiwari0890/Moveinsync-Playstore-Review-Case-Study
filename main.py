@@ -340,3 +340,89 @@ def main():
             )
             all_android_reviews.extend(and_revs)
 
+            # Analytics for this app's Android sample
+            sm_and = calculate_sample_summary(and_revs, requested_count=req_count)
+            sm_and["app_name"] = name
+            sm_and["platform"] = "Android"
+            sm_and["app_role"] = role
+            summary_metrics_list.append(sm_and)
+
+        # 2. iOS Collection
+        if target.get("ios_id"):
+            app_id = target["ios_id"]
+            print(f"\n>>> Collecting iOS Metadata & Reviews for '{name}' ({app_id})...")
+            # Metadata
+            meta_ios = get_app_store_metadata(app_id, country=args.country)
+            all_metadata.append(meta_ios)
+            log_collector(meta_ios["status"], f"Fetched iOS store metadata (Rating: {meta_ios.get('store_rating')} stars)", name, "iOS", app_id, 0, 0, "iTunes Lookup API")
+
+            # Reviews
+            def ios_cb(lvl, m):
+                log_collector(lvl, m, name, "iOS", app_id, req_count, len(all_ios_reviews), "Apple iTunes RSS Feed")
+
+            ios_revs = scrape_app_store_reviews(
+                app_id=app_id,
+                app_name=name,
+                app_role=role,
+                count=req_count,
+                start_date=start_date,
+                end_date=end_date,
+                country=args.country,
+                log_callback=ios_cb,
+            )
+            all_ios_reviews.extend(ios_revs)
+
+            # Analytics for this app's iOS sample
+            sm_ios = calculate_sample_summary(ios_revs, requested_count=req_count)
+            sm_ios["app_name"] = name
+            sm_ios["platform"] = "iOS"
+            sm_ios["app_role"] = role
+            summary_metrics_list.append(sm_ios)
+
+    # 3. Combined Dataset & Global Analytics
+    all_combined_reviews = all_android_reviews + all_ios_reviews
+    all_combined_reviews.sort(key=lambda r: r.get("review_date") or "", reverse=True)
+
+    print("\n" + "=" * 70)
+    print("RUNNING BUSINESS INTELLIGENCE & THEME EXTRACTION ANALYSIS...")
+    print("=" * 70)
+
+    monthly_trends = calculate_monthly_trends(all_combined_reviews)
+    segment_comparisons = calculate_segment_comparisons(all_combined_reviews)
+    issue_themes = extract_issue_themes(all_combined_reviews)
+
+    print(f"[*] Total Android Reviews: {len(all_android_reviews)}")
+    print(f"[*] Total iOS Reviews:     {len(all_ios_reviews)}")
+    print(f"[*] Total Combined:        {len(all_combined_reviews)}")
+    print(f"[*] Issue Themes Identified: {len(issue_themes)}")
+
+    # 4. Generate Excel Workbook
+    print(f"\n[*] Exporting comprehensive 6-sheet intelligence workbook to: '{output_file}'...")
+    export_intelligence_workbook(
+        android_reviews=all_android_reviews,
+        ios_reviews=all_ios_reviews,
+        combined_reviews=all_combined_reviews,
+        metadata_list=all_metadata,
+        summary_metrics=summary_metrics_list,
+        monthly_trends=monthly_trends,
+        segment_comparisons=segment_comparisons,
+        issue_themes=issue_themes,
+        collection_logs=collection_logs,
+        output_filepath=output_file,
+    )
+
+    print("\n" + "=" * 70)
+    print("SUCCESS: COLLECTION AND BUSINESS ANALYSIS COMPLETE!")
+    print(f"Excel Workbook Saved: {os.path.abspath(output_file)}")
+    print("Sheets Generated:")
+    print("  1. Android_Reviews   (Raw Android data with all fields)")
+    print("  2. iOS_Reviews       (Raw iOS data with all fields)")
+    print("  3. Combined_Reviews  (Unified cross-platform dataset, newest first)")
+    print("  4. App_Summary       (Store listing metadata & sample metrics & segment comparisons)")
+    print("  5. Issue_Themes      (Thematic complaint & positive analysis)")
+    print("  6. Collection_Log    (Complete audit trail of requests, results & API limits)")
+    print("=" * 70)
+
+
+if __name__ == "__main__":
+    main()

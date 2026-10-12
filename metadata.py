@@ -139,3 +139,51 @@ def get_app_store_metadata(app_id: str, country: str = "in") -> Dict[str, Any]:
                 "description": "",
                 "limitation_note": f"App ID '{clean_id}' not found on Apple App Store.",
                 "status": "NOT_FOUND",
+            }
+
+        app_info = results[0]
+        release_date = app_info.get("currentVersionReleaseDate")
+        if release_date:
+            try:
+                # ISO date parsing
+                dt = datetime.datetime.fromisoformat(release_date.replace("Z", "+00:00"))
+                release_date = dt.strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                pass
+
+        return {
+            "platform": "iOS",
+            "store_id": str(app_info.get("trackId", clean_id)),
+            "title": app_info.get("trackName", ""),
+            "developer": app_info.get("artistName", ""),
+            "store_url": app_info.get("trackViewUrl") or f"https://apps.apple.com/app/id{clean_id}",
+            "current_version": app_info.get("version"),
+            "last_updated": release_date,
+            "store_rating": round(float(app_info.get("averageUserRating") or 0.0), 2) if app_info.get("averageUserRating") is not None else None,
+            "store_ratings_count": app_info.get("userRatingCount"),
+            "category": app_info.get("primaryGenreName", ""),
+            "installs": "N/A (iOS)",
+            "description": app_info.get("description", ""),
+            "limitation_note": (
+                "Apple iTunes Lookup API exposes current version release date but does not "
+                "expose historical release dates for prior versions."
+            ),
+            "status": "SUCCESS",
+        }
+    except Exception as exc:
+        return {
+            "platform": "iOS",
+            "store_id": clean_id,
+            "title": "",
+            "developer": "",
+            "store_url": f"https://apps.apple.com/app/id{clean_id}",
+            "current_version": None,
+            "last_updated": None,
+            "store_rating": None,
+            "store_ratings_count": None,
+            "category": "",
+            "installs": "N/A (iOS)",
+            "description": "",
+            "limitation_note": f"Error fetching App Store metadata: {str(exc)}",
+            "status": "ERROR",
+        }

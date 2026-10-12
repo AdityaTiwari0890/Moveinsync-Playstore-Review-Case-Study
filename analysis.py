@@ -73,3 +73,41 @@ THEME_DEFINITIONS = [
     # Positive Themes
     {
         "name": "Punctual & Reliable Commute",
+        "type": "Positive",
+        "keywords": [r"\bon time\b", r"\bpunctual\b", r"\breliable\b", r"\bsmooth commute\b",
+                     r"\btimely\b", r"\bconvenient\b", r"\bgood service\b", r"\bgreat service\b"],
+        "min_rating": 4,
+    },
+    {
+        "name": "Intuitive & User-Friendly UI",
+        "type": "Positive",
+        "keywords": [r"\beasy to use\b", r"\buser friendly\b", r"\bsimple\b", r"\bclean ui\b",
+                     r"\bgreat app\b", r"\bgood app\b", r"\bseamless\b", r"\blove this app\b"],
+        "min_rating": 4,
+    },
+    {
+        "name": "Helpful & Courteous Drivers",
+        "type": "Positive",
+        "keywords": [r"\bpolite driver\b", r"\bgood driver\b", r"\bhelpful driver\b",
+                     r"\bcourteous\b", r"\bwell behaved\b", r"\bprofessional driver\b"],
+        "min_rating": 4,
+    },
+    {
+        "name": "Safety & Peace of Mind",
+        "type": "Positive",
+        "keywords": [r"\bsafe\b", r"\bsecurity\b", r"\bsos\b", r"\bwomen safety\b",
+                     r"\bsecure commute\b", r"\bpeace of mind\b"],
+        "min_rating": 4,
+    },
+]
+
+
+def calculate_sample_summary(reviews: List[Dict[str, Any]], requested_count: int = 500) -> Dict[str, Any]:
+    """
+    Calculate rating distributions and descriptive statistics for a collection of reviews.
+    """
+    total = len(reviews)
+    if total == 0:
+        return {
+            "total_reviews": 0,
+            "requested_count": requested_count,
