@@ -256,3 +256,68 @@ Step 4 is an additive local analytical and monitoring workspace. It reads, but d
 ### Quick start
 
 ```powershell
+cd "C:\Users\aktiw\Downloads\Performance Analyzer"
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+python monitor.py import-existing --input "App_Review_Intelligence_MoveInSync_20261012_173118_Analyzed.xlsx"
+python monitor.py import-step3
+python monitor.py status
+python monitor.py ai-check
+streamlit run app.py
+```
+
+The analyzed workbook currently contains 1,115 collected reviews across Android and iOS, including MoveInSync employee and driver app targets. The targets and counts are discovered from the workbook; this is a historical sample, not a claim that a live collection just ran. In the existing workbook, the iOS employee target is `962949521`, the iOS driver target is `389801252`, Android employee targets include `com.moveinsync.ets` and `field.moveinsync.ets`, and the Android driver target is `com.moveinsync.driver.dco`.
+
+### Dashboard pages and analytics
+
+- **Overview:** filtered sample KPIs, latest recorded published-rating snapshots (if available), app/platform comparison, review volume, rating distribution, negative-review themes, and a contextual AI panel.
+- **Rating Trends:** review-date monthly aggregates, review volume, negative share, actual recorded store-rating snapshots, and app-version sample comparisons. Review-date aggregates are not official-rating history.
+- **Review Explorer:** searchable and filterable source reviews with metadata and CSV export.
+- **Complaint Intelligence:** negative-theme frequency, overlapping multi-label share, platform matrix, and supporting review IDs/excerpts.
+- **Alerts:** alert history with acknowledge and resolve controls.
+- **Action Plan:** import and track the existing Step 3 priority matrix without editing the source workbook.
+- **AI Analysis Assistant:** hybrid semantic retrieval plus deterministic SQLite metrics, with visible evidence snippets and source labels.
+- **Knowledge Base:** incremental index/rebuild controls, indexed-document counts, pending updates, model, storage path, last indexing time, and errors.
+- **Data Collection Status:** app registry, source coverage, collection attempts, workbook import, and manual store collection.
+
+### Configuration and hosted Ollama
+
+The checked-in `.env.example` contains placeholders only. Do not overwrite an existing `.env`; copy the template only if no `.env` exists, then edit it locally. `API_KEY` is the canonical hosted Ollama secret. The Python server sends it only as `Authorization: Bearer <API_KEY>`; it is never displayed in the dashboard or included in logs. A missing or placeholder key is rejected before any hosted request is sent.
+
+```powershell
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+```
+
+Supported settings include:
+
+```text
+API_KEY=your_ollama_api_key
+OLLAMA_BASE_URL=https://ollama.com/api
+OLLAMA_MODEL=gemma4:31b
+OLLAMA_EMBEDDING_MODEL=embeddinggemma
+DATABASE_PATH=ratings_watch.db
+VECTOR_STORE_PATH=ratings_watch_vectors.db
+APP_STORE_ID=com.moveinsync.ets
+IOS_APP_ID=962949521
+RATING_DROP_THRESHOLD=0.5
+THEME_SPIKE_THRESHOLD=25.0
+MIN_ALERT_SAMPLE_SIZE=10
+```
+
+For local Ollama, use `OLLAMA_BASE_URL=http://localhost:11434` and install the configured chat and embedding models locally; a local API key is not required. The hosted endpoint follows Ollama's documented direct API (`https://ollama.com/api/chat` and `/api/embed`). Verify that both configured models are available to your Ollama account before indexing; the application does not silently substitute models. Documentation: [Ollama API authentication](https://docs.ollama.com/api/authentication), [Ollama chat API](https://docs.ollama.com/api/chat), and [Ollama embeddings API](https://docs.ollama.com/api/embed).
+
+If Ollama is unavailable, collection, imports, metrics, alerts, review exploration, and action tracking still work. Semantic indexing and AI answers require the configured embedding and chat endpoints.
+
+### RAG indexing and assistant
+
+The project implements retrieval-augmented generation, not fine-tuning. It embeds workbook review records, each populated analysis workbook sheet, Step 2/3 Markdown reports, the Step 3 action-plan workbook, and current SQLite reviews, alerts, and actions. Stable document IDs and content hashes support incremental updates. The local SQLite vector store retains embedding arrays and metadata; retrieval ranks candidates by cosine similarity and filters by available platform, app, role, theme, and date metadata. Exact counts and rating metrics are computed by fixed, parameterized SQLite queries; the model cannot execute SQL or mutate data. The assistant receives only a bounded set of retrieved snippets and a compact metrics bundle. Retrieved review text is treated as untrusted data.
+
+Relative values for `DATABASE_PATH`, `VECTOR_STORE_PATH`, `EXISTING_WORKBOOK`, `STEP3_MD`, and `STEP3_ACTION_PLAN` are resolved from the project directory, independent of the shell's current directory. `ratings_watch_vectors.db` is a SQLite database containing persisted document content, source metadata, and real embedding arrays. Readiness counts include only persisted documents with valid vectors; discovered records alone are not reported as indexed.
+
+```powershell
+# Import the historical review sample and Step 3 actions first.
+python monitor.py import-existing
+python monitor.py import-step3
