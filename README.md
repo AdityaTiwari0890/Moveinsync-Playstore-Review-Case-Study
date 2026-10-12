@@ -191,3 +191,68 @@ All collected reviews conform to the following schema across both platforms:
 | `Review Title` | Review title (iOS only; blank for Android) | `Smooth commute app` |
 | `Review Text` | Full customer review commentary | `<review text>` |
 | `Review Date` | Review date and time (`YYYY-MM-DD HH:MM:SS`) | `<review timestamp>` |
+| `App Version` | App version active when review was written | `<app version>` |
+| `Developer Reply` | Text of developer's reply (if present) | `<developer reply>` |
+| `Developer Reply Date` | Date of developer reply (if present) | `<reply timestamp>` |
+| `Helpful Votes` | Number of thumbs-up / helpful votes | `<vote count>` |
+| `Collection Timestamp`| Exact timestamp when scraping occurred | `<collection timestamp>` |
+| `Source URL` | Direct store listing URL | `https://play.google.com/store/apps/details?id=...` |
+
+---
+
+## Enhanced Excel Workbook Layout (11 Sheets)
+
+### Original Scraper Sheets (Preserved Intact)
+1. **`Android_Reviews`**: Raw data table for all scraped Android reviews.
+2. **`iOS_Reviews`**: Raw data table for all scraped iOS reviews.
+3. **`Combined_Reviews`**: Unified master dataset with all platforms, sorted newest first.
+4. **`App_Summary`**: Public store metadata, sample metrics, segment matrices, and monthly counts.
+5. **`Issue_Themes`**: Scraper-level keyword themes.
+6. **`Collection_Log`**: Scraper audit trail and API limitations.
+
+### Step 2 Analysis Engine Sheets (Appended with Charts)
+7. **`Rating_Trends`**: Rating distributions, Wilson score 95% confidence intervals, monthly trajectory, embedded openpyxl **Star Rating BarChart**, and **Monthly Trajectory LineChart**.
+8. **`Theme_Analysis`**: 11-category complaint breakdown (Total mentions, % of all reviews, average rating, employee vs. driver breakdown, and clean excerpts).
+9. **`Version_Analysis`**: Software version metrics ($N$, average rating, negative %, Wilson CI, regression flags, and evidence quotes).
+10. **`Pareto_Analysis`**: 1★ & 2★ negative review defect ranking, negative share %, cumulative share %, Pareto vital few classification, and embedded **Pareto BarChart**.
+11. **`Action_Priorities`**: Executive prioritization matrix with P1–P3 rankings, user impact severity, evidence confidence, estimated effort, recommended fixes, and success metrics.
+
+---
+
+## Running Automated Tests
+
+### 1. Run Step 2 Analysis Engine Tests (8 Tests)
+```powershell
+python test_analysis_engine.py
+```
+
+### 2. Run Step 1 Scraper Tests (6 Tests)
+```powershell
+python test_scraper.py
+```
+
+Expected output:
+```text
+Ran 8 tests in ~1s -> OK
+Ran 6 tests in ~5s -> OK
+```
+
+---
+
+## Known API Limitations
+
+1. **Apple App Store Public RSS Limits**:
+   - Apple's official customer-review RSS feed is limited to **10 pages × 50 reviews = 500 reviews per country**.
+   - If more than 500 iOS reviews are requested, the scraper collects all 500 available reviews and documents this limitation in the `Collection_Log`. Optional SerpApi support can be enabled via `.env` to pull additional iOS reviews.
+2. **Historical Version Release Notes**:
+   - Public store pages only display the *current* version release date. Neither Google nor Apple expose historical release date changelogs on public listings without developer console authentication. This is formally noted in `metadata.py` and the `App_Summary` sheet.
+
+---
+
+## Step 4 — MOVEINSYNC Ratings Watch
+
+Step 4 is an additive local analytical and monitoring workspace. It reads, but does not overwrite, the Step 1–3 workbooks and reports. SQLite stores review records, registered app targets, collection runs, published-rating snapshots, alerts, and tracked Step 3 actions. A separate SQLite vector store persists Ollama embeddings for hybrid retrieval.
+
+### Quick start
+
+```powershell
