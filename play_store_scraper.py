@@ -175,3 +175,25 @@ def scrape_play_store_reviews(
             rep_dt = item.get("repliedAt")
             rep_dt_str = None
             if isinstance(rep_dt, datetime.datetime):
+                rep_dt_str = rep_dt.strftime("%Y-%m-%d %H:%M:%S")
+            elif rep_dt:
+                rep_dt_str = str(rep_dt)
+
+            standardized_review: Dict[str, Any] = {
+                "app_name": app_name,
+                "store_id": package_id,
+                "platform": "Android",
+                "app_role": app_role,
+                "review_id": r_id,
+                "reviewer_name": item.get("userName") or "Anonymous",
+                "rating": int(item.get("score") or 0),
+                "review_title": None,  # Not present in Play Store
+                "review_text": item.get("content") or "",
+                "review_date": review_dt_str,
+                "app_version": item.get("reviewCreatedVersion") or item.get("appVersion") or None,
+                "developer_reply": item.get("replyContent") or None,
+                "developer_reply_date": rep_dt_str,
+                "helpful_votes": int(item.get("thumbsUpCount") or 0),
+                "collection_timestamp": collection_ts,
+                "source_url": source_url,
+            }

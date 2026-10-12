@@ -215,3 +215,57 @@ def scrape_app_store_reviews(
                     try:
                         review_date_val = datetime.date.fromisoformat(review_dt_str[:10])
                     except Exception:
+                        pass
+
+            # Date Range Filters
+            if review_date_val and end_date and review_date_val > end_date:
+                continue
+            if review_date_val and start_date and review_date_val < start_date:
+                reached_date_boundary = True
+                break
+
+            r_id = item.get("id")
+            if not r_id:
+                hash_seed = f"{item.get('user_name')}_{review_dt_str}_{item.get('content', '')[:50]}"
+                r_id = f"fallback_{hashlib.md5(hash_seed.encode('utf-8', errors='ignore')).hexdigest()}"
+
+            if r_id in seen_ids:
+                continue
+
+            seen_ids.add(r_id)
+            new_on_page += 1
+
+            standardized_review: Dict[str, Any] = {
+                "app_name": app_name,
+                "store_id": clean_id,
+                "platform": "iOS",
+                "app_role": app_role,
+                "review_id": r_id,
+                "reviewer_name": item.get("user_name") or "Anonymous",
+                "rating": int(item.get("rating") or 0),
+                "review_title": item.get("title") or None,
+                "review_text": item.get("content") or "",
+                "review_date": review_dt_str,
+                "app_version": item.get("version"),
+                "developer_reply": None,  # Not exposed in Apple customer-review RSS feed
+                "developer_reply_date": None,
+                "helpful_votes": int(item.get("votes") or 0),
+                "collection_timestamp": collection_ts,
+                "source_url": source_url,
+            }
+            collected_reviews.append(standardized_review)
+
+            if len(collected_reviews) >= count:
+                break
+
+        log("INFO", f"iOS RSS Page {page}: extracted {len(parsed_items)} raw reviews, {new_on_page} added. Total: {len(collected_reviews)}/{count}.")
+        time.sleep(0.3)
+
+    # Optional SerpApi Extension if configured and target count not yet reached
+    serpapi_key = os.getenv("SERPAPI_API_KEY")
+    if serpapi_key and len(collected_reviews) < count and not reached_date_boundary:
+        log("INFO", f"Querying SerpApi provider for additional iOS reviews for '{app_name}'...")
+        try:
+            serp_url = "https://serpapi.com/search.json"
+            serp_params = {
+                "engine": "apple_reviews",

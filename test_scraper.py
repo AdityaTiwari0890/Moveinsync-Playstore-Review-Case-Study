@@ -116,3 +116,27 @@ class TestAppReviewIntelligenceScraper(unittest.TestCase):
         self.assertEqual(summary["positive_pct"], 40.0)
 
         # Monthly trends
+        monthly = calculate_monthly_trends(sample_reviews)
+        self.assertGreater(len(monthly), 0)
+
+        # Segment comparisons
+        comps = calculate_segment_comparisons(sample_reviews)
+        self.assertIn("employee_vs_driver", comps)
+        self.assertIn("platform_comparison", comps)
+        self.assertIn("moveinsync_vs_competitors", comps)
+
+        # Theme extraction
+        themes = extract_issue_themes(sample_reviews)
+        theme_names = [t["theme"] for t in themes if t["review_count"] > 0]
+        self.assertTrue(any("Crash" in t for t in theme_names), "Should extract crash theme")
+        self.assertTrue(any("Punctual" in t or "Smooth" in t for t in theme_names), "Should extract punctual theme")
+
+    def test_06_excel_export_and_workbook_integrity(self):
+        """Verify that export_intelligence_workbook creates a valid 6-sheet workbook with tables."""
+        test_file = "test_intelligence_export.xlsx"
+        if os.path.exists(test_file):
+            os.remove(test_file)
+
+        mock_android = [{
+            "app_name": "MoveInSync", "store_id": "com.moveinsync.ets", "platform": "Android",
+            "app_role": "employee", "review_id": "rev_and_1", "reviewer_name": "John Doe",
