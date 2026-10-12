@@ -42,3 +42,18 @@ class AppleAppSource(BaseReviewSource):
         self.had_errors = False
 
     def fetch_reviews(self, app_id: str, app_name: str, app_role: str, count: int, **kwargs) -> List[Dict[str, Any]]:
+        from app_store_scraper import scrape_app_store_reviews
+
+        def capture(level: str, _message: str) -> None:
+            if level.upper() in {"ERROR", "WARNING"}:
+                self.had_errors = True
+
+        results = scrape_app_store_reviews(
+            app_id=app_id,
+            app_name=app_name,
+            app_role=app_role,
+            count=count,
+            country=kwargs.get("country", "in"),
+            log_callback=capture,
+        )
+        return results

@@ -71,3 +71,28 @@ class Step4Tests(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         try:
             self.assertEqual(conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0], 1)
+        finally:
+            conn.close()
+
+    def test_llm_unavailable_gracefully(self):
+        assistant = LLMAssistant(api_key="", base_url="https://ollama.com/api", model="gemma4:31b")
+        self.assertFalse(assistant.available())
+        result = assistant.ask("How are our ratings?")
+        self.assertFalse(result["ok"])
+
+    def test_normalization_does_not_invent_review_ids_or_platforms(self):
+        self.assertIsNone(normalize_review({"Rating": 1, "Review Text": "example"}))
+        self.assertIsNone(normalize_review({"Platform": "Android", "Rating": 1, "Review Text": "example"}))
+        normalized = normalize_review({"Platform": "Android", "Review ID": "real-id", "Rating": 1})
+        self.assertIsNone(normalized["app_name"])
+        self.assertIsNone(normalized["app_role"])
+        self.assertFalse(normalize_review({
+            "Platform": "Android", "Review ID": "real-id", "Rating": 1, "Is Unclassified": "False"
+        })["is_unclassified"])
+
+    def test_uncertain_reviews_remain_unclassified_instead_of_becoming_other(self):
+        result = RatingsWatchClassifier().classify("A quiet morning")
+        self.assertEqual(result["themes"], [])
+        self.assertTrue(result["is_unclassified"])
+
+    def test_collection_does_not_record_fake_store_rating_snapshot(self):

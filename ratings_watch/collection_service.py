@@ -78,3 +78,30 @@ class CollectionService:
                         official_rating=metadata["store_rating"],
                         rating_source=f"{platform_key}_public_store_metadata",
                         total_ratings_count=metadata.get("store_ratings_count"),
+                        run_id=run_id,
+                        metadata={"store_url": metadata.get("store_url"), "source_status": metadata.get("status")},
+                        db_path=self.db_path,
+                    )
+                    summary["rating_snapshot_id"] = snapshot_id
+                    summary["rating_snapshot_status"] = "recorded_from_public_store_metadata"
+                else:
+                    summary["rating_snapshot_status"] = "unavailable"
+                    summary["rating_snapshot_message"] = metadata.get("limitation_note") or "Source did not return a verified published rating."
+            except Exception as metadata_error:
+                summary["rating_snapshot_status"] = "unavailable"
+                summary["rating_snapshot_message"] = f"Store metadata lookup failed: {metadata_error}"
+
+            finish_collection_run(
+                run_id,
+                summary["status"],
+                summary,
+                notes=f"Collected {summary['fetched']} source reviews; store rating snapshot: {summary.get('rating_snapshot_status', 'unavailable')}",
+                db_path=self.db_path,
+            )
+            return summary
+        except Exception as exc:
+            summary["failed"] = max(summary["failed"], 1)
+            summary["status"] = "failed"
+            summary["error"] = str(exc)
+            finish_collection_run(run_id, "failed", summary, error=str(exc), db_path=self.db_path)
+            return summary

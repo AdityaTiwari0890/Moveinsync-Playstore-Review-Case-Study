@@ -57,3 +57,23 @@ def _priority_matrix_rows(path: Path) -> List[Dict[str, Any]]:
                 record = {
                     headers[column]: row.iloc[column]
                     for column in range(min(len(headers), len(row)))
+                }
+                record = {key: value for key, value in record.items() if _clean(value) is not None}
+                theme = _clean(record.get("Theme"))
+                priority = _clean(record.get("Priority"))
+                if not theme or not priority:
+                    continue
+                rows.append(
+                    {
+                        "priority": priority,
+                        "theme": theme,
+                        "category": _clean(record.get("Category")) or "Recommendation",
+                        "owner_team": _clean(record.get("Owner Team")),
+                        "effort_estimate": _clean(record.get("Effort Estimate") or record.get("Effort Estimate ")),
+                        "success_metric": _clean(record.get("Suggested Success Metric")),
+                        "status": _clean(record.get("Action Status")) or "Open",
+                        "notes": f"Imported from {path.name} / {sheet_name}",
+                        "source": "step3_xlsx",
+                        "original_row": {
+                            key: (None if _clean(value) is None else str(value))
+                            for key, value in record.items()

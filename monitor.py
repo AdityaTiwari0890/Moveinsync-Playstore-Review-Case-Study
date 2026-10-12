@@ -227,3 +227,32 @@ def main() -> None:
                     dict(row)
                     for row in conn.execute(
                         "SELECT platform, status, started_at, completed_at, fetched, inserted, updated, skipped, failed, error_message FROM collection_runs ORDER BY started_at DESC LIMIT 10"
+                    )
+                ],
+                "rating_snapshots": conn.execute("SELECT COUNT(*) FROM rating_snapshots").fetchone()[0],
+                "active_alerts": conn.execute("SELECT COUNT(*) FROM alerts WHERE resolved=0").fetchone()[0],
+                "sources": {
+                    "android": "existing Step 1 collector adapter available; live connectivity not verified by status",
+                    "ios": "existing Step 1 Apple RSS adapter available; live connectivity not verified by status",
+                },
+                "knowledge_base": {
+                    **vector_status,
+                    "sources": source_status,
+                    "index_readiness": "ready" if ready else "not_ready",
+                    "rag_readiness": (
+                        "ready" if ready and ai_status["ready"] else "not_ready"
+                    ),
+                },
+                "ollama_configuration": ai_status,
+            }
+        finally:
+            conn.close()
+        print(json.dumps(status, indent=2, ensure_ascii=False))
+    elif args.command == "run-monitor":
+        app_id = args.app_id or (IOS_APP_ID if args.platform == "ios" else settings.default_android_package)
+        app_name = args.app_name or settings.current_app_name
+        collection = collect_reviews(
+            args.platform,
+            app_id,
+            app_name,
+            args.count,

@@ -427,3 +427,57 @@ def upsert_alert(alert: Dict[str, Any], db_path: str = DB_PATH) -> str:
                    WHERE alert_key=?""",
                 (now, alert.get("baseline_value"), alert.get("current_value"),
                  alert.get("threshold"),
+                 json.dumps(alert.get("supporting_ids", [])),
+                 alert.get("cooldown_until"), alert["alert_key"]),
+            )
+            return "inserted"
+
+        conn.execute(
+            """INSERT INTO alerts (alert_key, alert_type, platform, theme, severity,
+               baseline_value, current_value, threshold, detected_at,
+               supporting_ids, suggested_action, cooldown_until)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+            (alert["alert_key"], alert["alert_type"], alert.get("platform"),
+             alert.get("theme"), alert.get("severity", "medium"),
+             alert.get("baseline_value"), alert.get("current_value"),
+             alert.get("threshold"), now,
+             json.dumps(alert.get("supporting_ids", [])),
+             alert.get("suggested_action"), alert.get("cooldown_until")),
+        )
+        return "inserted"
+
+
+def acknowledge_alert(alert_id: int, db_path: str = DB_PATH) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE alerts SET acknowledged=1, acknowledged_at=? WHERE id=?",
+            (now, alert_id),
+        )
+
+
+def resolve_alert(alert_id: int, db_path: str = DB_PATH) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with transaction(db_path) as conn:
+        conn.execute(
+            "UPDATE alerts SET resolved=1, resolved_at=? WHERE id=?",
+            (now, alert_id),
+        )
+
+
+# ── Action items ─────────────────────────────────────────────────────────────
+
+def upsert_action_item(item: Dict[str, Any], db_path: str = DB_PATH) -> str:
+    """Insert or skip if same theme+priority already exists."""
+    with transaction(db_path) as conn:
+        existing = conn.execute(
+            "SELECT id FROM action_items WHERE theme=? AND priority=? AND source=?",
+            (item.get("theme"), item.get("priority"), item.get("source", "step3_xlsx")),
+        ).fetchone()
+        if existing:
+            return "skipped"
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """INSERT INTO action_items
+               (source, priority, theme, category, owner_team, effort_estimate,
+                success_metric, status, status_updated_at, notes, original_row_json)

@@ -169,3 +169,32 @@ def _theme_counts(rows: List[Tuple[Any, ...]]) -> Tuple[int, Dict[str, List[str]
         if isinstance(themes, list):
             for theme in themes:
                 if theme:
+                    counts.setdefault(str(theme), []).append(str(review_id))
+    return len(negative), counts
+
+
+def evaluate_theme_spike(
+    db_path: str,
+    threshold: float = ALERT_THEME_SPIKE_THRESHOLD,
+    min_sample: int = ALERT_MIN_SAMPLE,
+) -> List[Dict[str, Any]]:
+    conn = sqlite3.connect(db_path)
+    alerts = []
+    try:
+        platforms = [row[0] for row in conn.execute("SELECT DISTINCT platform FROM reviews").fetchall()]
+        for platform in platforms:
+            current_rows = _period_reviews(conn, platform, 7, 0)
+            baseline_rows = _period_reviews(conn, platform, 14, 7)
+            current_total, current_themes = _theme_counts(current_rows)
+            baseline_total, baseline_themes = _theme_counts(baseline_rows)
+            if current_total < min_sample or baseline_total < min_sample:
+                continue
+            for theme, current_ids in current_themes.items():
+                current_share = 100 * len(current_ids) / current_total
+                baseline_share = 100 * len(baseline_themes.get(theme, [])) / baseline_total
+                delta = current_share - baseline_share
+                if delta > threshold:
+                    alerts.append(
+                        {
+                            "alert_type": "theme_spike",
+                            "platform": platform,
