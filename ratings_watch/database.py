@@ -266,3 +266,57 @@ def upsert_review(review: Dict[str, Any], run_id: Optional[int] = None,
         if existing:
             # Refresh only changed source fields; retain previously known optional metadata.
             changed = (
+                existing["rating"] != review.get("rating")
+                or existing["review_text"] != review.get("review_text")
+                or existing["review_date"] != review.get("review_date")
+                or existing["app_version"] != review.get("app_version")
+                or existing["developer_reply"] != review.get("developer_reply")
+                or existing["developer_reply_date"] != review.get("developer_reply_date")
+                or existing["assigned_themes"] != themes_json
+                or existing["classification_method"] != review.get("classification_method")
+                or existing["heuristic_confidence"] != review.get("heuristic_confidence")
+                or existing["app_name"] != review.get("app_name")
+                or existing["app_role"] != review.get("app_role")
+                or existing["store_id"] != review.get("store_id")
+                or existing["source_url"] != review.get("source_url")
+                or existing["source_collection_timestamp"] != review.get("source_collection_timestamp")
+                or bool(existing["is_unclassified"]) != bool(review.get("is_unclassified", False))
+            )
+            if changed:
+                conn.execute(
+                    """UPDATE reviews SET rating=COALESCE(?, rating),
+                       store_id=COALESCE(?, store_id), app_name=COALESCE(?, app_name),
+                       app_role=COALESCE(?, app_role), review_text=COALESCE(?, review_text),
+                       review_date=COALESCE(?, review_date), app_version=COALESCE(?, app_version),
+                       developer_reply=COALESCE(?, developer_reply),
+                       developer_reply_date=COALESCE(?, developer_reply_date),
+                       assigned_themes=?, classification_method=COALESCE(?, classification_method),
+                       heuristic_confidence=COALESCE(?, heuristic_confidence),
+                       source_url=COALESCE(?, source_url),
+                       source_collection_timestamp=COALESCE(?, source_collection_timestamp),
+                       is_unclassified=?,
+                       last_updated_at=?,
+                       collection_run_id=COALESCE(?, collection_run_id)
+                       WHERE platform=? AND review_id=?""",
+                    (
+                        review.get("rating"), review.get("store_id"), review.get("app_name"),
+                        review.get("app_role"), review.get("review_text"), review.get("review_date"),
+                        review.get("app_version"),
+                        review.get("developer_reply"), review.get("developer_reply_date"),
+                        themes_json, review.get("classification_method"),
+                        review.get("heuristic_confidence"), review.get("source_url"),
+                        review.get("source_collection_timestamp"), int(bool(review.get("is_unclassified", False))), now, run_id,
+                        review.get("platform"), review.get("review_id"),
+                    ),
+                )
+                return "updated"
+            return "skipped"
+
+        conn.execute(
+            """INSERT INTO reviews (
+                review_id, platform, store_id, app_name, app_role, reviewer_name,
+                rating, review_title, review_text, review_date, app_version,
+                developer_reply, developer_reply_date, helpful_votes,
+                assigned_themes, classification_method, heuristic_confidence,
+                is_unclassified,
+                source_url, source_collection_timestamp, first_collected_at, last_updated_at,

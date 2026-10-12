@@ -141,3 +141,32 @@ def main() -> None:
         app_id = args.app_id or (IOS_APP_ID if args.platform == "ios" else settings.default_android_package)
         app_name = args.app_name or settings.current_app_name
         result = collect_reviews(args.platform, app_id, app_name, args.count, args.db, app_role=args.app_role)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif args.command == "snapshot":
+        from ratings_watch.database import save_rating_snapshot
+        save_rating_snapshot(
+            platform=args.platform,
+            store_id=args.app_id,
+            app_name=args.app_name,
+            official_rating=args.rating,
+            rating_source="manual_snapshot",
+            total_ratings_count=None,
+            db_path=args.db,
+        )
+        print({"status": "snapshot_saved", "platform": args.platform, "official_rating": args.rating})
+    elif args.command == "check-alerts":
+        result = check_alerts(args.db)
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    elif args.command == "index-knowledge-base":
+        try:
+            result = index_knowledge_base(
+                rebuild=args.rebuild,
+                workbook_path=EXISTING_WORKBOOK,
+                step3_md_path=STEP3_MD,
+                action_plan_path=STEP3_ACTION_PLAN,
+                db_path=args.db,
+                vector_path=args.vector_store,
+            )
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        except Exception as exc:
+            source_status = inspect_knowledge_sources(
