@@ -187,3 +187,41 @@ def calculate_monthly_trends(reviews: List[Dict[str, Any]]) -> List[Dict[str, An
             "app_name": app_name,
             "platform": platform,
             "review_count": len(revs),
+            "avg_rating": avg_r,
+            "negative_reviews_count": neg,
+            "negative_percentage": round(neg / len(revs) * 100, 1) if revs else 0.0,
+        })
+    return results
+
+
+def calculate_version_trends(reviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Calculate rating trends grouped by app version where version data is available.
+    """
+    groups: Dict[Tuple[str, str, str], List[Dict[str, Any]]] = defaultdict(list)
+
+    for r in reviews:
+        ver = r.get("app_version")
+        if not ver or ver.lower() in ("none", "null", "unknown", "varies with device"):
+            continue
+        app_name = r.get("app_name", "Unknown")
+        platform = r.get("platform", "Unknown")
+        groups[(app_name, platform, ver)].append(r)
+
+    results = []
+    for (app_name, platform, ver), revs in sorted(groups.items(), key=lambda x: len(x[1]), reverse=True):
+        ratings = [r.get("rating", 0) for r in revs if r.get("rating")]
+        avg_r = round(sum(ratings) / len(ratings), 2) if ratings else 0.0
+        neg = sum(1 for r in ratings if r in (1, 2))
+        results.append({
+            "app_name": app_name,
+            "platform": platform,
+            "app_version": ver,
+            "review_count": len(revs),
+            "avg_rating": avg_r,
+            "negative_percentage": round(neg / len(revs) * 100, 1) if revs else 0.0,
+        })
+    return results
+
+
+def calculate_segment_comparisons(reviews: List[Dict[str, Any]]) -> Dict[str, Any]:

@@ -225,3 +225,117 @@ def compute_rating_analysis(df: pd.DataFrame, min_sample: int = 15) -> Dict[str,
             "Sample Size Flag": flag,
             "Sample Avg Rating": avg_r,
             "1★ Count": c1, "1★ %": round(c1 / n * 100, 1),
+            "2★ Count": c2, "2★ %": round(c2 / n * 100, 1),
+            "3★ Count": c3, "3★ %": round(c3 / n * 100, 1),
+            "4★ Count": c4, "4★ %": round(c4 / n * 100, 1),
+            "5★ Count": c5, "5★ %": round(c5 / n * 100, 1),
+            "Negative Count (1★+2★)": neg_count,
+            "Negative Rate %": neg_rate,
+            "Wilson 95% CI Lower": ci_low,
+            "Wilson 95% CI Upper": ci_high,
+            "Positive Rate % (4★+5★)": pos_rate,
+        }
+
+    # 1. Segment Tables
+    overview_rows = [
+        _calc_stats(df, "Overall", "All Combined Reviews"),
+        _calc_stats(df[df["app_role"] == "employee"], "App Role", "Employee Apps"),
+        _calc_stats(df[df["app_role"] == "driver"], "App Role", "Driver Apps"),
+        _calc_stats(df[df["app_role"] == "competitor"], "App Role", "Competitor Apps"),
+        _calc_stats(df[df["platform"].str.lower() == "android"], "Platform", "Android"),
+        _calc_stats(df[df["platform"].str.lower() == "ios"], "Platform", "iOS"),
+    ]
+
+    # App specific rows
+    for app in df["app_name"].unique():
+        overview_rows.append(_calc_stats(df[df["app_name"] == app], "Application", str(app)))
+
+    # 2. Monthly Trajectory
+    monthly_rows = []
+    df_with_dates = df.dropna(subset=["year_month"]).sort_values("year_month")
+    for ym, group in df_with_dates.groupby("year_month"):
+        n_m = len(group)
+        neg_m = (group["rating"].isin([1, 2])).sum()
+        ci_l, ci_u = wilson_confidence_interval(neg_m, n_m)
+        monthly_rows.append({
+            "Year-Month": ym,
+            "Sample Size (N)": n_m,
+            "Sample Size Flag": "Sufficient" if n_m >= min_sample else f"Low (N < {min_sample})",
+            "Sample Avg Rating": round(group["rating"].mean(), 2),
+            "1★ Count": (group["rating"] == 1).sum(),
+            "2★ Count": (group["rating"] == 2).sum(),
+            "Negative Reviews Count": neg_m,
+            "Negative Rate %": round(neg_m / n_m * 100, 1),
+            "Wilson 95% CI Lower": ci_l,
+            "Wilson 95% CI Upper": ci_u,
+        })
+
+    return {
+        "overview_table": pd.DataFrame(overview_rows),
+        "monthly_table": pd.DataFrame(monthly_rows),
+    }
+
+
+def compute_theme_and_pareto_analysis(
+    df: pd.DataFrame, classifier: ReviewClassifier
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """
+    Apply multi-label classification to all reviews, compute theme statistics across all data,
+    and generate the Pareto 80/20 analysis on 1-star and 2-star negative reviews.
+    """
+    classified_records = []
+    for _, row in df.iterrows():
+        text = str(row.get("review_text") or "")
+        title = str(row.get("review_title") or "")
+        full_text = f"{title} {text}".strip()
+        rating = int(row.get("rating", 0))
+
+        c_res = classifier.classify_text(full_text, rating=rating)
+        classified_records.append({
+            "assigned_themes": c_res["themes"],
+            "classification_method": c_res["method"],
+            "evidence": str(c_res["evidence"]),
+            "heuristic_confidence": c_res["heuristic_confidence"],
+            "is_unclassified": c_res["is_unclassified"],
+            "audit_note": c_res["audit_note"],
+        })
+
+    df_classified = df.copy()
+    for k in ["assigned_themes", "classification_method", "evidence", "heuristic_confidence", "is_unclassified", "audit_note"]:
+        df_classified[k] = [r[k] for r in classified_records]
+
+    # --- Table 1: Full Theme Breakdown Across All Reviews ---
+    total_reviews = len(df_classified)
+    all_theme_rows = []
+
+    for item in classifier.taxonomy:
+        t_name = item["theme"]
+        t_desc = item["description"]
+
+        # Filter reviews where t_name is in assigned_themes
+        matching_mask = df_classified["assigned_themes"].apply(lambda themes: t_name in themes)
+        t_df = df_classified[matching_mask]
+        t_count = len(t_df)
+
+        emp_count = len(t_df[t_df["app_role"] == "employee"])
+        drv_count = len(t_df[t_df["app_role"] == "driver"])
+        and_count = len(t_df[t_df["platform"].str.lower() == "android"])
+        ios_count = len(t_df[t_df["platform"].str.lower() == "ios"])
+
+        avg_r = round(t_df["rating"].mean(), 2) if t_count > 0 else None
+        neg_count = len(t_df[t_df["rating"].isin([1, 2])])
+        neg_rate = round(neg_count / t_count * 100, 1) if t_count > 0 else 0.0
+
+        # Sample excerpts
+        excerpts = []
+        for _, ex_row in t_df[t_df["rating"].isin([1, 2])].head(3).iterrows():
+            txt = str(ex_row.get("review_text") or "").replace("\n", " ").strip()
+            if len(txt) > 100:
+                txt = txt[:97] + "..."
+            if txt:
+                excerpts.append(f'[{ex_row.get("review_id", "")[:8]}]: "{txt}"')
+        sample_quotes = " | ".join(excerpts) if excerpts else "N/A"
+
+        all_theme_rows.append({
+            "Theme": t_name,
+            "Description": t_desc,
