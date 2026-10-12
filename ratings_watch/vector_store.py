@@ -82,3 +82,45 @@ def get_index_status(path: str, pending_count: Optional[int] = None) -> Dict[str
                 vector = json.loads(row["embedding_json"])
                 metadata = json.loads(row["metadata_json"])
                 if (
+                    isinstance(vector, list)
+                    and vector
+                    and all(isinstance(value, (int, float)) and math.isfinite(value) for value in vector)
+                    and isinstance(metadata, dict)
+                ):
+                    persisted_vectors += 1
+                    source_type = str(metadata.get("source_type") or "unknown")
+                    chunk_counts[source_type] = chunk_counts.get(source_type, 0) + 1
+                    document_ids.setdefault(source_type, set()).add(
+                        str(metadata.get("parent_document_id") or row["metadata_json"])
+                    )
+                    if source_type == "review" and metadata.get("review_id") is not None:
+                        review_ids.add((metadata.get("platform"), metadata["review_id"]))
+            except (TypeError, ValueError):
+                continue
+        persisted_records = len(vector_rows)
+        counts = {source: len(ids) for source, ids in document_ids.items()}
+        document_count = sum(counts.values())
+        return {
+            "document_count": document_count,
+            "chunk_count": persisted_vectors,
+            "persisted_record_count": persisted_records,
+            "review_count": len(review_ids),
+            "review_chunk_count": chunk_counts.get("review", 0),
+            "analysis_count": counts.get("analysis", 0),
+            "analysis_chunk_count": chunk_counts.get("analysis", 0),
+            "recommendation_count": counts.get("recommendation", 0),
+            "recommendation_chunk_count": chunk_counts.get("recommendation", 0),
+            "report_count": counts.get("report", 0),
+            "report_chunk_count": chunk_counts.get("report", 0),
+            "persisted_vector_count": persisted_vectors,
+            "invalid_vector_count": persisted_records - persisted_vectors,
+            "counts_by_source": counts,
+            "chunks_by_source": chunk_counts,
+            "last_indexed_at": state.get("last_indexed_at"),
+            "last_error": state.get("last_error"),
+            "embedding_model": state.get("embedding_model"),
+            "pending_count": pending_count,
+            "path": str(resolve_project_path(path)),
+            "store_error": None,
+        }
+    finally:

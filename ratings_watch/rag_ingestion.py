@@ -277,3 +277,58 @@ def discover_documents(
                     "original_review_text": row["review_text"] or "",
                 }
                 if doc_id in workbook_review_metadata:
+                    metadata.update(workbook_review_metadata[doc_id])
+                    metadata.update({"confidence": row["heuristic_confidence"], "source_url": row["source_url"]})
+                _add_chunked_document(documents, doc_id, content, metadata)
+
+            for row in conn.execute(
+                "SELECT id, alert_type, platform, theme, severity, baseline_value, current_value, threshold, detected_at, suggested_action FROM alerts"
+            ):
+                content = "Monitoring alert\n" + "\n".join(f"{key}: {row[key]}" for key in row.keys() if row[key] is not None)
+                doc_id = f"alert:{row['id']}"
+                _add_chunked_document(
+                    documents,
+                    doc_id,
+                    content,
+                    {"source_type": "alert", "source_name": "ratings_watch.db", "alert_id": row["id"], "platform": row["platform"], "theme": row["theme"]},
+                )
+            for row in conn.execute("SELECT id, priority, theme, category, owner_team, effort_estimate, success_metric, status, notes FROM action_items"):
+                content = "Step 3 action item\n" + "\n".join(f"{key}: {row[key]}" for key in row.keys() if row[key] is not None)
+                doc_id = f"action:{row['id']}"
+                _add_chunked_document(
+                    documents,
+                    doc_id,
+                    content,
+                    {"source_type": "recommendation", "source_name": "ratings_watch.db", "action_id": row["id"], "theme": row["theme"]},
+                )
+        finally:
+            conn.close()
+    return list(documents.values())
+
+
+def _add_report_chunks(
+    documents: Dict[str, Dict[str, Any]],
+    path: Path,
+    source_type: str,
+    section: str,
+    text: str,
+    counters: Dict[str, int],
+) -> None:
+    chunks = _split_text(text)
+    counter_key = f"{path.name}:{section}"
+    base = counters.get(counter_key, 0)
+    for offset, chunk in enumerate(chunks):
+        number = base + offset + 1
+        doc_id = f"{source_type}:{path.name}:{section}:{number}"
+        documents[doc_id] = _document(
+            doc_id,
+            chunk,
+            {
+                "source_type": source_type,
+                "source_name": path.name,
+                "source_path": str(path),
+                "section": section,
+                "chunk": number,
+                "parent_document_id": f"{source_type}:{path.name}:{section}",
+                "chunk_index": offset + 1,
+                "chunk_count": len(chunks),
