@@ -20,6 +20,22 @@ An enterprise-ready Python solution to scrape, analyze, and benchmark mobile app
    - Filter reviews by the most recent **6 months**, **12 months**, or a custom `YYYY-MM-DD` date range.
 4. **Initial 6-Sheet Formatted Workbook**:
    - Exports raw datasets (`Android_Reviews`, `iOS_Reviews`, `Combined_Reviews`, `App_Summary`, `Issue_Themes`, `Collection_Log`).
+     <img width="1530" height="790" alt="image" src="https://github.com/user-attachments/assets/ac9a03dd-58c0-4a2b-9e3a-de91207f61f3" />
+     <img width="1535" height="787" alt="image" src="https://github.com/user-attachments/assets/c83cb7e3-5ce3-4715-bb69-018651fdaaa4" />
+     <img width="1535" height="801" alt="image" src="https://github.com/user-attachments/assets/82a27233-13b2-4cb6-a00e-066902bef08d" />
+     <img width="1535" height="801" alt="image" src="https://github.com/user-attachments/assets/fb770abe-9683-465d-a1e0-feec9e62fce5" />
+     <img width="1535" height="793" alt="image" src="https://github.com/user-attachments/assets/c6239cfe-e207-4518-9c8d-b2b344a9c6c8" />
+     <img width="1535" height="793" alt="image" src="https://github.com/user-attachments/assets/fb085fea-026a-4e3a-b2e7-ded2d8c45fc6" />
+     <img width="1535" height="791" alt="image" src="https://github.com/user-attachments/assets/ba419ca0-8d55-491b-b745-d655d01ef338" />
+     <img width="1535" height="791" alt="image" src="https://github.com/user-attachments/assets/3d81bc1d-6675-4302-bee7-954d1339e344" />
+     <img width="1535" height="792" alt="image" src="https://github.com/user-attachments/assets/adb3a1c5-9c64-48b5-8950-1032061cd0b8" />
+     <img width="1535" height="792" alt="image" src="https://github.com/user-attachments/assets/f943ec23-4317-4f78-81b9-498d1f0dff61" />
+     <img width="1535" height="790" alt="image" src="https://github.com/user-attachments/assets/36ae85e3-5e0a-44ad-be87-b218930c507d" />
+     <img width="1535" height="790" alt="image" src="https://github.com/user-attachments/assets/579f5290-7ff9-4f63-9cc2-311133e2f8a2" />
+     <img width="1532" height="791" alt="image" src="https://github.com/user-attachments/assets/b40a6574-00dd-4b34-811e-037ae5cfe718" />
+     <img width="1535" height="790" alt="image" src="https://github.com/user-attachments/assets/c6c8a794-db23-457a-bca8-f88b18f8b18e" />
+     <img width="1535" height="790" alt="image" src="https://github.com/user-attachments/assets/1145f2f3-5ff5-4a0e-8397-4cfa7e93ca3f" />
+     
 
 ### Step 2: Enterprise App Review Analysis Engine
 1. **Data Normalization & Deduplication**:
@@ -43,6 +59,13 @@ An enterprise-ready Python solution to scrape, analyze, and benchmark mobile app
    - Ranks root causes into P1–P3 priorities with user impact severity, evidence confidence, estimated effort, recommended fixes, and success metrics.
 7. **Executive Markdown Report**:
    - Compiles comprehensive executive intelligence report (`MOVEIN_SYNC_ANALYSIS_REPORT.md`).
+<img width="1528" height="762" alt="image" src="https://github.com/user-attachments/assets/af8d8ceb-60e5-4897-b17e-76c9f069b0e6" />
+<img width="1535" height="771" alt="image" src="https://github.com/user-attachments/assets/8c5a5896-2a98-4262-bbca-331c6baf69f3" />
+<img width="1535" height="772" alt="image" src="https://github.com/user-attachments/assets/5e8d3c9a-bed8-43b1-9d27-bb875aecb63f" />
+<img width="1532" height="748" alt="image" src="https://github.com/user-attachments/assets/5cbbaea6-d63a-4321-a012-7822b8199b35" />
+<img width="1531" height="772" alt="image" src="https://github.com/user-attachments/assets/61da627a-f931-4a49-a8cf-016825f6d1b1" />
+<img width="1532" height="766" alt="image" src="https://github.com/user-attachments/assets/0a6c1291-6d10-4385-ae0f-b8c9a459d51e" />
+<img width="1532" height="766" alt="image" src="https://github.com/user-attachments/assets/1127a4c6-fc07-4b7f-afe2-0ecf345fb297" />
 
 ---
 
